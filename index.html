@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WALS Feature Explorer</title>
+  <meta name="description" content="Explore how morphological and syntactic features pattern together across languages, using data from the World Atlas of Language Structures.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%230a58ca'/%3E%3Ccircle cx='5' cy='6' r='1.6' fill='%23E69F00'/%3E%3Ccircle cx='10' cy='9' r='1.6' fill='%23F0E442'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#features-heading">Skip to the tool</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <h1>WALS Feature Explorer</h1>
+      <p class="lede">Choose features from the <a href="https://wals.info">World Atlas of Language Structures</a>,
+        pair them up, and see how their values combine across the world's languages: on a map, in tables,
+        and in three statistical models.</p>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <p id="loading" role="status">Loading WALS data…</p>
+
+    <section aria-labelledby="features-heading" id="features-section" hidden>
+      <h2 id="features-heading" tabindex="-1">1. Choose your features</h2>
+      <p>Choose five morphological features and five syntactic features. Features from the WALS areas
+        <em>Nominal Syntax</em> and <em>Simple Clauses</em> mix morphology and syntax, so they appear in both lists,
+        marked “mixed”. If you are unsure which list such a feature belongs in, ask your instructor.</p>
+      <div class="feature-columns">
+        <fieldset id="morph-fieldset">
+          <legend>Morphological features</legend>
+          <div id="morph-slots"></div>
+        </fieldset>
+        <fieldset id="syn-fieldset">
+          <legend>Syntactic features</legend>
+          <div id="syn-slots"></div>
+        </fieldset>
+      </div>
+      <p id="feature-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section aria-labelledby="pairs-heading" id="pairs-section" hidden>
+      <h2 id="pairs-heading">2. Build feature pairs</h2>
+      <p>Pair up the features you chose. Each pair is analysed on its own.</p>
+      <form id="pair-form" class="pair-form" novalidate>
+        <div class="field">
+          <label for="pair-a">First feature</label>
+          <select id="pair-a"></select>
+        </div>
+        <div class="field">
+          <label for="pair-b">Second feature</label>
+          <select id="pair-b"></select>
+        </div>
+        <button type="submit" class="button primary">Add pair</button>
+      </form>
+      <p id="pair-error" class="error" role="alert"></p>
+      <p id="pair-status" class="status" role="status" aria-live="polite"></p>
+      <ol id="pair-list" class="pair-list"></ol>
+    </section>
+
+    <section aria-labelledby="results-heading" id="results-section" hidden>
+      <h2 id="results-heading" tabindex="-1">3. Results</h2>
+      <p id="results-placeholder">Choose <strong>Show results</strong> next to one of your pairs.</p>
+      <p id="results-status" class="status" role="status" aria-live="polite"></p>
+      <div id="results"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p id="data-credit">Data: World Atlas of Language Structures.</p>
+      <p>Statistics are computed in your browser; nothing you choose is sent anywhere.
+        Your choices are saved in this browser and in the page address, so you can bookmark or share an analysis.</p>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

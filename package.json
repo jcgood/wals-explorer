@@ -1,0 +1,9 @@
+{
+  "name": "wals-explorer",
+  "private": true,
+  "type": "module",
+  "description": "Browser tool for exploring pairs of WALS features (no build step, no dependencies).",
+  "scripts": {
+    "test": "python3 tests/check_stats.py"
+  }
+}
