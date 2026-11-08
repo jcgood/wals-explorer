@@ -214,6 +214,7 @@ export function modelControlled(records, rows, cols, groupKey, { reps = 2000, se
     usableGroups: usable.length,
     usableLanguages: usableRecords.length,
     usableShare: records.length ? usableRecords.length / records.length : 0,
+    usable: new Set(usableRecords),
     observed: O, expected: E, z,
   };
 }

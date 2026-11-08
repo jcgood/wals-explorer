@@ -92,6 +92,22 @@ with sync_playwright() as p:
         page.select_option("#map-filter", "0")
         page.click("#view-row")
 
+        # Clicking a cell lists its languages; "Show these on the map" filters the map.
+        m2_buttons = page.locator("#sec-m2 ~ .table-block .cell-btn")
+        if m2_buttons.count() == 0:
+            problems.append("no clickable cells in Model 2's table")
+        else:
+            m2_buttons.first.click()
+            panel = page.locator("#sec-m2 ~ .table-block .lang-panel").first
+            if panel.is_hidden() or panel.locator(".lang-groups li").count() == 0:
+                problems.append("cell click did not list languages")
+            focused_tag = page.evaluate("document.activeElement && document.activeElement.tagName")
+            if focused_tag != "H4":
+                problems.append(f"focus not moved to the language list (got {focused_tag})")
+            panel.locator("button:has-text('Show these on the map')").click()
+            if page.eval_on_selector("#map-filter", "s => s.value") == "":
+                problems.append("'Show these on the map' did not filter the map")
+
         if "chi-square" in page.inner_text("#results").lower():
             problems.append("results still mention chi-square")
         if page.locator(".color-key").count() < 2:

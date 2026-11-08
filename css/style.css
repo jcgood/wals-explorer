@@ -171,6 +171,16 @@ td.pos .cell-sub, td.neg .cell-sub { color: inherit; }
 
 .print-only { display: none; }
 
+.cell-btn {
+  font: inherit; color: inherit; background: none; border: none; padding: 0;
+  cursor: pointer; text-decoration: underline dotted; text-underline-offset: 0.2em;
+}
+.cell-btn:hover { text-decoration-style: solid; }
+.lang-panel { border: 1px solid var(--border); border-radius: 0.3rem; padding: 0.5rem 0.8rem; margin: 0 0 1rem; background: var(--surface); }
+.lang-panel h4 { margin-top: 0.25rem; }
+.lang-groups { padding-left: 1.2rem; }
+.lang-groups li { margin: 0.25rem 0; }
+
 .view-toggle { border: none; padding: 0; margin: 0.25rem 0; display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .view-toggle legend { padding: 0; margin-bottom: 0.25rem; }
 
@@ -206,6 +216,7 @@ body.printing #map { width: 680px; height: 360px; }
   .toolbar, #pdf-hint, .results-nav, .no-print, .help-block, details:not(.print-open),
   .leaflet-control-container, .site-footer p:last-child { display: none !important; }
   .print-only { display: block; }
+  .cell-btn { text-decoration: none; }
   .print-header p { margin: 0 0 0.2rem; font-size: 9pt; word-break: break-all; }
   .site-header { padding: 0 0 0.3rem; margin-bottom: 0.5rem; }
   .site-header h1 { font-size: 14pt; }

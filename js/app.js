@@ -301,7 +301,10 @@ function colorKey(entries) {
       el("span", { class: `key-swatch ${cls}`, "aria-hidden": "true" }), text)));
 }
 
-function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key }) {
+// `pick` (optional) makes nonzero cells clickable: pick.records(i, j)
+// returns that cell's languages and pick.showOnMap(i, j) filters the map.
+function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key, pick }) {
+  const panel = el("div", { class: "lang-panel", hidden: true });
   const thead = el("thead", {}, el("tr", {},
     el("th", { scope: "col" }, `${A.name} × ${B.name}`),
     use.cols.map(j => el("th", { scope: "col", class: "num" }, B.values[colVals[j]])),
@@ -310,7 +313,16 @@ function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key }
     el("th", { scope: "row" }, A.values[rowVals[i]]),
     use.cols.map(j => {
       const c = cell(i, j);
-      return el("td", { class: `num ${c.cls || ""}` }, c.text, c.sub ? el("span", { class: "cell-sub" }, c.sub) : null);
+      const n = pick ? pick.records(i, j).length : 0;
+      const combo = `${A.values[rowVals[i]]} + ${B.values[colVals[j]]}`;
+      const main = n > 0
+        ? el("button", {
+          type: "button", class: "cell-btn", title: `List the ${n} language${n > 1 ? "s" : ""} with ${combo}`,
+          "aria-label": `${c.text}. List the ${n} language${n > 1 ? "s" : ""} with ${combo}`,
+          onclick: () => showLanguagePanel(panel, `${combo}${pick.suffix || ""}`, pick.records(i, j), () => pick.showOnMap(i, j)),
+        }, c.text)
+        : c.text;
+      return el("td", { class: `num ${c.cls || ""}` }, main, c.sub ? el("span", { class: "cell-sub" }, c.sub) : null);
     }),
     totals ? el("td", { class: "num total" }, totals.row(i)) : null)));
   if (totals) {
@@ -321,7 +333,34 @@ function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key }
   }
   const scroll = el("div", { class: "table-scroll", tabindex: "0", role: "group", "aria-label": caption },
     el("table", {}, el("caption", { text: caption }), thead, tbody));
-  return key ? el("div", { class: "table-block" }, scroll, colorKey(key)) : scroll;
+  if (!key && !pick) return scroll;
+  return el("div", { class: "table-block" }, scroll, key ? colorKey(key) : null,
+    pick ? el("p", { class: "status no-print" }, "Select a number to list the languages behind it.") : null, panel);
+}
+
+// List a cell's languages under its table, grouped by family and area.
+function showLanguagePanel(panel, combo, recs, showOnMap) {
+  const L = DATA.languages;
+  const groups = new Map();
+  for (const r of recs) {
+    const k = `${DATA.families[DATA.genusFamily[r.genus]]} (${DATA.macroareas[r.area]})`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const sorted = [...groups].sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0]));
+  const heading = el("h4", { tabindex: "-1" }, `${combo}: ${recs.length} language${recs.length > 1 ? "s" : ""}`);
+  panel.replaceChildren(
+    heading,
+    el("p", { class: "status" }, `Grouped by family and area, largest group first (${sorted.length} group${sorted.length > 1 ? "s" : ""}). `,
+      "If most languages come from one or two groups, the pattern may reflect shared history rather than a general tendency."),
+    el("div", { class: "toolbar" },
+      el("button", { type: "button", class: "button small", onclick: showOnMap }, "Show these on the map"),
+      el("button", { type: "button", class: "button small", onclick: () => { panel.hidden = true; } }, "Close list")),
+    el("ul", { class: "lang-groups" }, sorted.map(([k, rs]) => el("li", {},
+      el("strong", {}, `${k}: ${rs.length}`), " — ",
+      rs.map(r => L.name[r.lang]).sort((x, y) => x.localeCompare(y)).join(", ")))));
+  panel.hidden = false;
+  heading.focus();
 }
 
 // Cells where fewer than MIN_EXPECTED languages are expected aren't
@@ -487,6 +526,17 @@ function renderPairResults(out, ctx) {
       ["sec-m2", "Model 2: controlling for family and area"], ["sec-help", "How to read these results"],
     ].map(([id, t]) => el("li", {}, el("a", { href: `#${id}`, onclick: e => { e.preventDefault(); $(id).focus(); $(id).scrollIntoView(); } }, t))))));
 
+  const byCell = new Map();
+  for (const r of records) {
+    const k = `${r.a}|${r.b}`;
+    if (!byCell.has(k)) byCell.set(k, []);
+    byCell.get(k).push(r);
+  }
+  ctx.pick = {
+    records: (i, j) => byCell.get(`${rows[i]}|${cols[j]}`) || [],
+    showOnMap: (i, j) => ctx.showOnMap && ctx.showOnMap(rows[i], cols[j]),
+  };
+
   renderMap(out, ctx);
   renderDescriptive(out, ctx);
   renderModel1(out, ctx);
@@ -496,7 +546,8 @@ function renderPairResults(out, ctx) {
 
 // ----- map -----
 
-function renderMap(out, { A, B, records, rows, cols, m1 }) {
+function renderMap(out, ctx) {
+  const { A, B, records, rows, cols, m1 } = ctx;
   out.append(sectionHeading("sec-map", "Map of value combinations"));
   const combos = [];
   m1.table.forEach((r, i) => r.forEach((n, j) => { if (n > 0) combos.push({ i, j, n }); }));
@@ -518,6 +569,15 @@ function renderMap(out, { A, B, records, rows, cols, m1 }) {
     el("option", { value: "", text: `All combinations (${records.length} languages)` }),
     combos.map((c, k) => el("option", { value: String(k), text: `${c.label} (${c.n})` })));
   out.append(el("div", { class: "field no-print" }, el("label", { for: filterId, text: "Show on the map" }), filter));
+
+  // Used by the clickable table cells: show one combination on the map.
+  ctx.showOnMap = (a, b) => {
+    const k = combos.findIndex(c => rows[c.i] === a && cols[c.j] === b);
+    filter.value = k >= 0 ? String(k) : "";
+    filter.dispatchEvent(new Event("change"));
+    $("sec-map").scrollIntoView();
+    filter.focus();
+  };
 
   const mapDiv = el("div", { id: "map", role: "region", "aria-label": `Map of ${records.length} languages coloured by their combination of ${A.id} and ${B.id} values. The same data is in the tables below.` });
   out.append(mapDiv);
@@ -584,7 +644,7 @@ function renderMap(out, { A, B, records, rows, cols, m1 }) {
 
 // ----- descriptive statistics -----
 
-function renderDescriptive(out, { A, B, records, rows, cols, m1, areas }) {
+function renderDescriptive(out, { A, B, records, rows, cols, m1, areas, pick }) {
   out.append(sectionHeading("sec-desc", "Descriptive statistics"));
   const byArea = DATA.macroareas.map((name, k) => [name, records.filter(r => r.area === k).length]);
   out.append(facts([
@@ -601,19 +661,19 @@ function renderDescriptive(out, { A, B, records, rows, cols, m1, areas }) {
   const views = {
     counts: () => matrixTable({
       caption: `Number of languages with each combination (rows: ${A.id}; columns: ${B.id})`,
-      A, B, rowVals: rows, colVals: cols, use,
+      A, B, rowVals: rows, colVals: cols, use, pick,
       cell: (i, j) => ({ text: String(t[i][j]) }),
       totals: { row: i => String(rowSums[i]), col: j => String(colSums[j]), all: () => String(n) },
     }),
     row: () => matrixTable({
       caption: `Row percentages: of the languages with each ${A.id} value, the share with each ${B.id} value`,
-      A, B, rowVals: rows, colVals: cols, use,
+      A, B, rowVals: rows, colVals: cols, use, pick,
       cell: (i, j) => ({ text: pct(t[i][j] / rowSums[i]) }),
       totals: { row: i => `100% (${rowSums[i]})`, col: j => pct(colSums[j] / n), all: () => `100% (${n})` },
     }),
     col: () => matrixTable({
       caption: `Column percentages: of the languages with each ${B.id} value, the share with each ${A.id} value`,
-      A, B, rowVals: rows, colVals: cols, use,
+      A, B, rowVals: rows, colVals: cols, use, pick,
       cell: (i, j) => ({ text: pct(t[i][j] / colSums[j]) }),
       totals: { row: i => pct(rowSums[i] / n), col: j => `100% (${colSums[j]})`, all: () => `100% (${n})` },
     }),
@@ -655,7 +715,7 @@ function verdict(p, what) {
     : `By this measure there is no clear evidence that the two features are associated ${what}.`;
 }
 
-function renderModel1(out, { A, B, rows, cols, m1 }) {
+function renderModel1(out, { A, B, rows, cols, m1, pick }) {
   out.append(sectionHeading("sec-m1", "Model 1: all languages counted"));
   out.append(el("p", {}, "Every language counts once. ",
     `To get the p-value, the tool shuffles the ${B.id} values among the languages ${m1.reps.toLocaleString()} times, which breaks any real connection between the two features, `,
@@ -674,6 +734,7 @@ function renderModel1(out, { A, B, rows, cols, m1 }) {
     caption: "Which combinations stand out: each number (an adjusted residual) shows how far a combination is from what you would expect if the features were unrelated. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
     key: RESIDUAL_KEY,
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
+    pick,
     cell: (i, j) => residualCell(T.residuals[i][j], m1.table[i][j], T.expected[i][j]),
   }));
 }
@@ -688,7 +749,7 @@ const RESIDUAL_KEY = [
 
 // ----- model 2 -----
 
-function renderModel2(out, { A, B, rows, cols, m1, m2 }) {
+function renderModel2(out, { A, B, rows, cols, m1, m2, pick }) {
   out.append(sectionHeading("sec-m2", "Model 2: controlling for family and area"));
   out.append(el("p", {}, "Related languages share features because they inherited them, and neighbouring languages share features through contact. ",
     "This model groups the languages by family within each of WALS's six large areas (for example, Bantu languages in Africa). ",
@@ -706,6 +767,11 @@ function renderModel2(out, { A, B, rows, cols, m1, m2 }) {
     caption: "Which combinations stand out within groups: each number compares a combination's count with what you would expect if, inside each family-and-area group, the features were unrelated. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
     key: RESIDUAL_KEY,
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
+    pick: {
+      records: (i, j) => pick.records(i, j).filter(r => m2.usable.has(r)),
+      showOnMap: pick.showOnMap,
+      suffix: " (only the languages that count in Model 2)",
+    },
     cell: (i, j) => residualCell(m2.z[i][j], m2.observed[i][j], m2.expected[i][j]),
   }));
 }
