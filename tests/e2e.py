@@ -16,8 +16,8 @@ SHOTS = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 AXE = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js"
 
 MORPH = ["69A", "51A", "49A"]
-EXCLUDED = ["26A", "95A", "96A", "97A", "31A", "32A", "77A", "113A"]
-SYN = ["81A", "87A", "143A"]
+EXCLUDED = ["26A", "95A", "96A", "97A", "31A", "32A", "77A", "113A", "143A", "144A", "38A", "82A", "84A"]
+SYN = ["81A", "87A", "85A"]
 N_PAIRS = 3 + 9
 
 problems = []
@@ -123,12 +123,12 @@ with sync_playwright() as p:
         if page.eval_on_selector_all("#features-section select", "ss => ss.filter(s => s.value).length"):
             problems.append("cleared choices came back after reload")
         # A pair with few shared languages carries a warning.
-        page.goto(URL + "#m=54A,,&s=84A,,&show=54A~84A")
+        page.goto(URL + "#m=34A,54A,&s=,,&show=34A~54A")
         page.reload()
         page.wait_for_selector("#sec-m3")
-        if "Only 55 languages" not in page.inner_text("#results"):
-            problems.append("small-pair warning missing for 54A x 84A")
-        page.goto(URL + "#m=69A,51A,49A&s=81A,87A,143A&show=69A~81A")
+        if "Only 78 languages" not in page.inner_text("#results"):
+            problems.append("small-pair warning missing for 34A x 54A")
+        page.goto(URL + "#m=69A,51A,49A&s=81A,87A,85A&show=69A~81A")
         page.reload()
         page.wait_for_selector("#sec-m3")
 

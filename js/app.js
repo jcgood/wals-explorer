@@ -83,6 +83,11 @@ const EXCLUDED = {
   "32A": "largely predictable from 30A Number of Genders, which draws more distinctions",
   "77A": "largely predictable from 78A Coding of Evidentiality, which draws more distinctions",
   "113A": "largely predictable from 114A Subtypes of Asymmetric Standard Negation, which draws more distinctions",
+  "143A": "its values partly encode whether the negator is an affix or a word, which is what 112A Negative Morphemes measures",
+  "144A": "its values partly encode whether the negator is an affix or a word, which is what 112A Negative Morphemes measures",
+  "38A": "overlaps heavily with 37A Definite Articles (they share the value “no definite or indefinite article”)",
+  "82A": "largely predictable from 81A Order of Subject, Object and Verb",
+  "84A": "largely predictable from 83A Order of Object and Verb",
 };
 
 // Features need at least MIN_LANGS languages and must not be excluded; the
