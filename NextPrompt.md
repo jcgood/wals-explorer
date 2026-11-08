@@ -5,11 +5,12 @@ where things stand; it holds no facts of its own beyond the current thread.
 
 ## Now
 
-**2026-11-08:** Prototype built and tested locally for Jeff to try (see
-README for what it does and how to run it). The repo is on GitHub as a
-PRIVATE repo; GitHub Pages is not enabled. Next: Jeff tries it locally and
-decides (a) whether to use it for Homework 10, (b) whether to make it public
-and turn on Pages. Don't publish without his say-so.
+**2026-11-08:** LIVE at https://jcgood.github.io/wals-explorer/ (repo made
+public and GitHub Pages turned on at Jeff's request; every push to main
+redeploys it, so students see changes within a couple of minutes). Next:
+Jeff rewrites Homework 10's text for the 3 + 3 design (it still describes
+5 + 5 features and uses prefixing vs. suffixing, 26A, which is now
+excluded).
 
 The Homework 10 assignment text lives in the morphology repo's
 git-ignored content (`Morphology/2026/Homeworks/10-MorphologyHomework.tex`);
