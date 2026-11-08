@@ -20,7 +20,9 @@ its "NEXT TIME?" notes are what motivated this tool.
 - Opening `index.html` as a file fails (the data fetch is blocked); serve it.
 - `data/wals.json` is generated; rebuild it with `scripts/build_data.py`,
   don't edit it by hand.
-- Assignment targets (10 pairs, 5 morph–syn) are constants at the top of
-  `js/app.js`, shown as guidance only.
+- The assignment design is built in (2026-11-08, Jeff): 3 morphological +
+  3 syntactic features; pairs are generated automatically (3 morph×morph,
+  9 morph×syn); syntactic list is "A" features only (`inList` in
+  `js/app.js`). `SLOTS` sets the number per list.
 - After any change to `js/stats.js`, run `tests/check_stats.py`; after UI
   changes, run `tests/e2e.py` against a local server.

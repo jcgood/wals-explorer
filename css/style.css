@@ -125,6 +125,7 @@ select {
 .pair-list { padding-left: 1.5rem; }
 .pair-list li { margin: 0.5rem 0; padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: 0.3rem; }
 .pair-list li.current { border-width: 2px; border-color: var(--accent); }
+.pair-list li.pending { color: var(--muted); border-style: dashed; }
 .pair-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .pair-name { flex: 1 1 20rem; }
 .badge { font-size: 0.82rem; border: 1px solid var(--border); border-radius: 1rem; padding: 0.05rem 0.55rem; color: var(--muted); white-space: nowrap; }

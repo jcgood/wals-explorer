@@ -26,9 +26,13 @@
 
     <section aria-labelledby="features-heading" id="features-section" hidden>
       <h2 id="features-heading" tabindex="-1">1. Choose your features</h2>
-      <p>Choose five morphological features and five syntactic features. Features from the WALS areas
-        <em>Nominal Syntax</em> and <em>Simple Clauses</em> mix morphology and syntax, so they appear in both lists,
-        marked “mixed”. If you are unsure which list such a feature belongs in, ask your instructor.</p>
+      <p>Choose three morphological features and three syntactic features. The tool then pairs each morphological
+        feature with the other two (three morphology–morphology pairs) and with each syntactic feature
+        (nine morphology–syntax pairs).</p>
+      <p>Features from the WALS areas <em>Nominal Syntax</em> and <em>Simple Clauses</em> mix morphology and syntax,
+        so they appear in both lists, marked “mixed”. If you are unsure which list such a feature belongs in, ask your
+        instructor. Where WALS splits one topic into several features (for example 81A and 81B), the syntactic list
+        offers only the first, “A”, feature.</p>
       <div class="feature-columns">
         <fieldset id="morph-fieldset">
           <legend>Morphological features</legend>
@@ -43,22 +47,13 @@
     </section>
 
     <section aria-labelledby="pairs-heading" id="pairs-section" hidden>
-      <h2 id="pairs-heading">2. Build feature pairs</h2>
-      <p>Pair up the features you chose. Each pair is analysed on its own.</p>
-      <form id="pair-form" class="pair-form" novalidate>
-        <div class="field">
-          <label for="pair-a">First feature</label>
-          <select id="pair-a"></select>
-        </div>
-        <div class="field">
-          <label for="pair-b">Second feature</label>
-          <select id="pair-b"></select>
-        </div>
-        <button type="submit" class="button primary">Add pair</button>
-      </form>
-      <p id="pair-error" class="error" role="alert"></p>
+      <h2 id="pairs-heading">2. Your pairs</h2>
+      <p>Each pair is analysed on its own. Pairs appear here as soon as both of their features are chosen.</p>
       <p id="pair-status" class="status" role="status" aria-live="polite"></p>
-      <ol id="pair-list" class="pair-list"></ol>
+      <h3 id="mm-heading">Morphology × morphology</h3>
+      <ol id="pair-list-mm" class="pair-list" aria-labelledby="mm-heading"></ol>
+      <h3 id="ms-heading">Morphology × syntax</h3>
+      <ol id="pair-list-ms" class="pair-list" aria-labelledby="ms-heading"></ol>
     </section>
 
     <section aria-labelledby="results-heading" id="results-section" hidden>

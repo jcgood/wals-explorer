@@ -3,9 +3,7 @@ import { modelAllLanguages, modelGenusSampling, modelArealControl } from "./stat
 
 // ---------- settings ----------
 
-const SLOTS = 5;                 // features per list
-const TARGET_PAIRS = 10;         // assignment targets, shown as guidance only
-const TARGET_MORPH_SYN = 5;
+const SLOTS = 3;                 // features per list
 const PERM_REPS = 2000;
 const GENUS_DRAWS = 1000;
 const STORAGE_KEY = "wals-explorer-v1";
@@ -23,7 +21,7 @@ const OTHER_COLOR = "#9a9a9a";
 
 let DATA = null;
 const FEAT = new Map();
-let state = { morph: Array(SLOTS).fill(""), syn: Array(SLOTS).fill(""), pairs: [], show: null };
+let state = { morph: Array(SLOTS).fill(""), syn: Array(SLOTS).fill(""), show: null };
 let map = null;
 let renderToken = 0;
 
@@ -67,27 +65,29 @@ function featureLabel(f) {
   return `${f.id} ${f.name}`;
 }
 
-function slotClass(id) {
-  if (state.morph.includes(id)) return "morph";
-  if (state.syn.includes(id)) return "syn";
-  return null;
-}
-
 const CLASS_WORD = { morph: "morphological", syn: "syntactic" };
 
-function pairType(a, b) {
-  const ca = slotClass(a), cb = slotClass(b);
-  if (ca === cb) return ca === "morph" ? "morph–morph" : "syn–syn";
-  return "morph–syn";
+const pairKey = (a, b) => `${a}~${b}`;
+
+// The syntactic list offers only the "A" feature of each WALS chapter.
+const inList = (f, cls) => cls === "morph" || f.id.endsWith("A");
+
+// Pairs are fixed by the design: morphology × morphology (each morphological
+// feature with the others) and morphology × syntax (each with each).
+function derivedPairs(s = state) {
+  const m = s.morph.map((id, i) => ({ id, slot: i + 1 }));
+  const mm = [], ms = [];
+  for (let i = 0; i < SLOTS; i++) {
+    for (let j = i + 1; j < SLOTS; j++) mm.push({ a: m[i], b: m[j] });
+    for (let j = 0; j < SLOTS; j++) ms.push({ a: m[i], b: { id: s.syn[j], slot: j + 1 } });
+  }
+  return { mm, ms };
 }
 
-const PAIR_TYPE_LONG = {
-  "morph–syn": "morphological–syntactic",
-  "morph–morph": "morphological–morphological",
-  "syn–syn": "syntactic–syntactic",
+const readyPairs = (s = state) => {
+  const { mm, ms } = derivedPairs(s);
+  return [...mm, ...ms].filter(p => p.a.id && p.b.id).map(p => pairKey(p.a.id, p.b.id));
 };
-
-const pairKey = (a, b) => `${a}~${b}`;
 
 // ---------- saving and restoring ----------
 
@@ -95,31 +95,30 @@ function saveState() {
   const hash = new URLSearchParams();
   hash.set("m", state.morph.join(","));
   hash.set("s", state.syn.join(","));
-  hash.set("p", state.pairs.map(([a, b]) => pairKey(a, b)).join(","));
   if (state.show) hash.set("show", state.show);
   history.replaceState(null, "", `#${hash.toString()}`);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
 }
 
 function restoreState() {
-  const valid = id => (FEAT.has(id) ? id : "");
+  const valid = (id, cls) => (FEAT.has(id) && inList(FEAT.get(id), cls) ? id : "");
   const clean = s => {
-    const morph = Array.from({ length: SLOTS }, (_, i) => valid((s.morph || [])[i] || ""));
-    const syn = Array.from({ length: SLOTS }, (_, i) => valid((s.syn || [])[i] || ""));
-    const chosen = new Set([...morph, ...syn].filter(Boolean));
-    const pairs = (s.pairs || []).filter(([a, b]) => chosen.has(a) && chosen.has(b) && a !== b);
-    const show = pairs.some(([a, b]) => pairKey(a, b) === s.show) ? s.show : null;
-    return { morph, syn, pairs, show };
+    const seen = new Set();
+    const pick = (list, cls) => Array.from({ length: SLOTS }, (_, i) => {
+      const id = valid((list || [])[i] || "", cls);
+      if (!id || seen.has(id)) return "";
+      seen.add(id);
+      return id;
+    });
+    const morph = pick(s.morph, "morph");
+    const syn = pick(s.syn, "syn");
+    const show = readyPairs({ morph, syn }).includes(s.show) ? s.show : null;
+    return { morph, syn, show };
   };
   if (location.hash.length > 1) {
     const h = new URLSearchParams(location.hash.slice(1));
     const split = k => (h.get(k) || "").split(",");
-    state = clean({
-      morph: split("m"),
-      syn: split("s"),
-      pairs: (h.get("p") || "").split(",").filter(Boolean).map(x => x.split("~")),
-      show: h.get("show"),
-    });
+    state = clean({ morph: split("m"), syn: split("s"), show: h.get("show") });
     return;
   }
   try {
@@ -138,7 +137,7 @@ function buildFeatureSelect(cls, index) {
   for (const area of areas) {
     const mixed = MIXED_AREAS.includes(area);
     const group = el("optgroup", { label: mixed ? `${area} (mixed)` : area });
-    for (const f of DATA.features.filter(f => f.area === area)) {
+    for (const f of DATA.features.filter(f => f.area === area && inList(f, cls))) {
       group.append(el("option", { value: f.id, text: `${featureLabel(f)} (${f.lang.length} languages)` }));
     }
     select.append(group);
@@ -179,107 +178,49 @@ function updateFeatureHints() {
 }
 
 function onFeatureChange(cls, index, value) {
-  const old = state[cls][index];
   state[cls][index] = value;
-  let removed = 0;
-  if (old && old !== value) {
-    const before = state.pairs.length;
-    state.pairs = state.pairs.filter(([a, b]) => a !== old && b !== old);
-    removed = before - state.pairs.length;
-    if (state.show && !state.pairs.some(([a, b]) => pairKey(a, b) === state.show)) {
-      state.show = null;
-      renderResults();
-    }
+  if (state.show && !readyPairs().includes(state.show)) {
+    state.show = null;
+    renderResults();
   }
   updateFeatureHints();
-  renderPairSelects();
   renderPairs();
-  if (removed) {
-    $("pair-status").textContent += ` Removed ${removed} pair${removed > 1 ? "s" : ""} that used ${old}.`;
-  }
   saveState();
 }
 
 // ---------- step 2: pairs ----------
 
-function chosenFeatures() {
-  return [
-    ...state.morph.filter(Boolean).map(id => ({ id, cls: "morph" })),
-    ...state.syn.filter(Boolean).map(id => ({ id, cls: "syn" })),
-  ];
-}
-
-function renderPairSelects() {
-  for (const sid of ["pair-a", "pair-b"]) {
-    const select = $(sid);
-    const keep = select.value;
-    select.replaceChildren(el("option", { value: "", text: "— Choose —" }));
-    for (const cls of ["morph", "syn"]) {
-      const group = el("optgroup", { label: cls === "morph" ? "Your morphological features" : "Your syntactic features" });
-      for (const c of chosenFeatures().filter(c => c.cls === cls)) {
-        group.append(el("option", { value: c.id, text: featureLabel(FEAT.get(c.id)) }));
-      }
-      if (group.children.length) select.append(group);
-    }
-    if (chosenFeatures().some(c => c.id === keep)) select.value = keep;
-  }
-}
-
-function renderPairs() {
-  const list = $("pair-list");
+function renderPairList(list, pairs, aWord, bWord) {
   list.replaceChildren();
-  const counts = { "morph–syn": 0, "morph–morph": 0, "syn–syn": 0 };
-  state.pairs.forEach(([a, b], i) => {
-    const type = pairType(a, b);
-    counts[type]++;
-    const name = `${featureLabel(FEAT.get(a))} × ${featureLabel(FEAT.get(b))}`;
-    const current = state.show === pairKey(a, b);
+  for (const { a, b } of pairs) {
+    const slotName = `${aWord} feature ${a.slot} × ${bWord} feature ${b.slot}`;
+    if (!a.id || !b.id) {
+      list.append(el("li", { class: "pending" }, el("div", { class: "pair-row" },
+        el("span", { class: "pair-name" }, `${slotName}: not ready yet (choose both features above)`))));
+      continue;
+    }
+    const name = `${featureLabel(FEAT.get(a.id))} × ${featureLabel(FEAT.get(b.id))}`;
+    const current = state.show === pairKey(a.id, b.id);
     list.append(el("li", { class: current ? "current" : "" },
       el("div", { class: "pair-row" },
         el("span", { class: "pair-name", text: name }),
-        el("span", { class: "badge", text: PAIR_TYPE_LONG[type] }),
         el("button", {
           type: "button", class: "button small primary",
           "aria-label": `Show results for ${name}`,
           "aria-current": current ? "true" : null,
-          onclick: () => showPair(a, b),
-        }, "Show results"),
-        el("button", {
-          type: "button", class: "button small",
-          "aria-label": `Remove pair ${name}`,
-          onclick: () => removePair(i),
-        }, "Remove"))));
-  });
-  const n = state.pairs.length;
-  $("pair-status").textContent =
-    `${n} pair${n === 1 ? "" : "s"}: ${counts["morph–syn"]} morphological–syntactic, ` +
-    `${counts["morph–morph"]} morphological–morphological, ${counts["syn–syn"]} syntactic–syntactic. ` +
-    `The assignment asks for at least ${TARGET_PAIRS} pairs, at least ${TARGET_MORPH_SYN} of them morphological–syntactic.`;
-}
-
-function addPair(event) {
-  event.preventDefault();
-  const a = $("pair-a").value, b = $("pair-b").value;
-  const err = $("pair-error");
-  err.textContent = "";
-  if (!a || !b) { err.textContent = "Choose two features first."; return; }
-  if (a === b) { err.textContent = "Choose two different features."; return; }
-  if (state.pairs.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) {
-    err.textContent = "You already have this pair."; return;
+          onclick: () => showPair(a.id, b.id),
+        }, "Show results"))));
   }
-  state.pairs.push([a, b]);
-  renderPairs();
-  saveState();
 }
 
-function removePair(i) {
-  const [a, b] = state.pairs[i];
-  state.pairs.splice(i, 1);
-  if (state.show === pairKey(a, b)) { state.show = null; renderResults(); }
-  renderPairs();
-  saveState();
-  const buttons = $("pair-list").querySelectorAll("button");
-  (buttons[Math.min(i * 2, buttons.length - 2)] || $("pair-a")).focus();
+function renderPairs() {
+  const { mm, ms } = derivedPairs();
+  renderPairList($("pair-list-mm"), mm, "Morphological", "morphological");
+  renderPairList($("pair-list-ms"), ms, "Morphological", "syntactic");
+  const ready = p => p.a.id && p.b.id;
+  const nmm = mm.filter(ready).length, nms = ms.filter(ready).length;
+  $("pair-status").textContent =
+    `${nmm} of ${mm.length} morphology–morphology pairs and ${nms} of ${ms.length} morphology–syntax pairs are ready.`;
 }
 
 function showPair(a, b) {
@@ -761,14 +702,12 @@ async function init() {
     $("morph-slots").append(buildFeatureSelect("morph", i));
     $("syn-slots").append(buildFeatureSelect("syn", i));
   }
-  $("pair-form").addEventListener("submit", addPair);
   $("data-credit").replaceChildren(`Data: ${DATA.citation} Version: ${DATA.version}. Licence: ${DATA.license}. `,
     "Map tiles © OpenStreetMap contributors.");
 
   $("loading").remove();
   for (const id of ["features-section", "pairs-section", "results-section"]) $(id).hidden = false;
   updateFeatureHints();
-  renderPairSelects();
   renderPairs();
   renderResults();
   saveState();

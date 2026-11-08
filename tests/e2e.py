@@ -15,9 +15,9 @@ URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8765/"
 SHOTS = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 AXE = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js"
 
-MORPH = ["26A", "51A", "49A", "30A", "112A"]
-SYN = ["81A", "83A", "87A", "92A", "143A"]
-PAIRS = [("26A", "81A"), ("51A", "83A"), ("49A", "87A")]
+MORPH = ["26A", "51A", "49A"]
+SYN = ["81A", "87A", "143A"]
+N_PAIRS = 3 + 9
 
 problems = []
 
@@ -52,20 +52,20 @@ with sync_playwright() as p:
         disabled = page.eval_on_selector("#morph-1 option[value='26A']", "o => o.disabled")
         if not disabled:
             problems.append("duplicate feature not disabled")
+        # Syntactic list offers only "A" features.
+        non_a = page.eval_on_selector_all("#syn-0 option", "os => os.map(o => o.value).filter(v => v && !v.endsWith('A'))")
+        if non_a:
+            problems.append(f"non-A features in syntactic list: {non_a[:5]}")
+        morph_non_a = page.eval_on_selector_all("#morph-0 option", "os => os.map(o => o.value).filter(v => v && !v.endsWith('A'))")
+        print("morph list keeps non-A features:", len(morph_non_a))
 
-        for a, b in PAIRS:
-            page.select_option("#pair-a", a)
-            page.select_option("#pair-b", b)
-            page.click("#pair-form button[type=submit]")
-        # Duplicate pair is refused.
-        page.select_option("#pair-a", "81A"); page.select_option("#pair-b", "26A")
-        page.click("#pair-form button[type=submit]")
-        if "already" not in page.inner_text("#pair-error"):
-            problems.append("duplicate pair not refused")
         print("pair status:", page.inner_text("#pair-status"))
+        n_buttons = page.locator(".pair-list button:has-text('Show results')").count()
+        if n_buttons != N_PAIRS:
+            problems.append(f"expected {N_PAIRS} pairs, got {n_buttons}")
 
         t0 = time.time()
-        page.click("#pair-list li:nth-child(1) button:has-text('Show results')")
+        page.click("#pair-list-ms li:nth-child(1) button:has-text('Show results')")
         page.wait_for_selector("#sec-m3")
         print(f"results rendered in {time.time() - t0:.2f}s")
         focused = page.evaluate("document.activeElement && document.activeElement.id")
@@ -86,8 +86,18 @@ with sync_playwright() as p:
         # Reload: the hash restores the analysis.
         page.reload()
         page.wait_for_selector("#sec-m3")
-        if page.locator("#pair-list li").count() != len(PAIRS):
+        if page.locator(".pair-list button:has-text('Show results')").count() != N_PAIRS:
             problems.append("pairs not restored from link")
+        if "26A" not in page.inner_text("#res-title") or "81A" not in page.inner_text("#res-title"):
+            problems.append("shown pair not restored from link")
+
+        # Removing a feature leaves its pairs pending and clears results.
+        page.select_option("#syn-0", "")
+        if page.locator("#pair-list-ms li.pending").count() != 3:
+            problems.append("pending pairs not shown after clearing a feature")
+        if page.locator("#sec-m1").count():
+            problems.append("results not cleared when their pair became incomplete")
+        page.select_option("#syn-0", "81A")
 
         # Narrow (phone) layout: no horizontal page scroll.
         page.set_viewport_size({"width": 375, "height": 800})

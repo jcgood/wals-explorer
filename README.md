@@ -1,9 +1,12 @@
 # WALS Feature Explorer
 
 A browser tool for LIN 410/510 (Morphology, University at Buffalo) Homework 10.
-Students choose five morphological and five syntactic features from the
-[World Atlas of Language Structures](https://wals.info) (WALS), pair them up,
-and for each pair get:
+Students choose three morphological and three syntactic features from the
+[World Atlas of Language Structures](https://wals.info) (WALS). The tool
+pairs the morphological features with each other (3 pairs) and each
+morphological feature with each syntactic one (9 pairs). The syntactic list
+offers only the "A" feature of chapters that WALS splits into several
+features (81A but not 81B). For each pair, students get:
 
 1. **A combined map** of languages coloured by their combination of values,
    with a filter for single combinations and a link to the same combination
