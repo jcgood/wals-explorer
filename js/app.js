@@ -7,7 +7,8 @@ const SLOTS = 3;                 // features per list
 const MIN_LANGS = 250;           // features coded for fewer languages aren't offered
 const SMALL_PAIR = 100;          // pairs sharing fewer languages get a warning
 const PERM_REPS = 2000;
-const GENUS_DRAWS = 1000;
+const GENUS_DRAWS = 100;         // one-per-genus samples (Model 2)
+const GENUS_REPS = 200;          // shuffles per sample (Model 2)
 const STORAGE_KEY = "wals-explorer-v1";
 
 const MORPH_AREAS = ["Morphology", "Nominal Categories", "Verbal Categories"];
@@ -275,9 +276,23 @@ function nonEmpty(table) {
 }
 
 // Generic matrix table. cell(i, j) returns {text, sub, cls}.
-function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals }) {
+// Colour keys shown under shaded tables, so colour is never the only cue.
+const KEY = {
+  "pos strong": "Dark blue: clearly more languages than expected",
+  "pos": "Light blue: somewhat more than expected",
+  "neg strong": "Dark orange: clearly fewer languages than expected",
+  "neg": "Light orange: somewhat fewer than expected",
+};
+
+function colorKey(entries) {
+  return el("ul", { class: "color-key", "aria-label": "Colour key for the table above" },
+    entries.map(([cls, text]) => el("li", {},
+      el("span", { class: `key-swatch ${cls}`, "aria-hidden": "true" }), text)));
+}
+
+function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key }) {
   const thead = el("thead", {}, el("tr", {},
-    el("th", { scope: "col" }, `${A.name} \\ ${B.name}`),
+    el("th", { scope: "col" }, `${A.name} × ${B.name}`),
     use.cols.map(j => el("th", { scope: "col", class: "num" }, B.values[colVals[j]])),
     totals ? el("th", { scope: "col", class: "num total" }, "Total") : null));
   const tbody = el("tbody", {}, use.rows.map(i => el("tr", {},
@@ -293,8 +308,9 @@ function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals }) {
       use.cols.map(j => el("td", { class: "num" }, totals.col(j))),
       el("td", { class: "num" }, totals.all())));
   }
-  return el("div", { class: "table-scroll", tabindex: "0", role: "group", "aria-label": caption },
+  const scroll = el("div", { class: "table-scroll", tabindex: "0", role: "group", "aria-label": caption },
     el("table", {}, el("caption", { text: caption }), thead, tbody));
+  return key ? el("div", { class: "table-block" }, scroll, colorKey(key)) : scroll;
 }
 
 function residualCell(r, o, e) {
@@ -359,7 +375,7 @@ function renderResults({ focus = false } = {}) {
       return;
     }
     const m1 = modelAllLanguages(records, rows, cols, { reps: PERM_REPS });
-    const m2 = modelGenusSampling(records, rows, cols, { draws: GENUS_DRAWS });
+    const m2 = modelGenusSampling(records, rows, cols, { draws: GENUS_DRAWS, reps: GENUS_REPS });
     const m3 = modelArealControl(records, rows, cols, DATA.macroareas.length, { reps: PERM_REPS });
     renderPairResults(out, { A, B, records, rows, cols, m1, m2, m3 });
     $("results-status").textContent = `Results ready for ${title}.`;
@@ -408,12 +424,37 @@ function renderPairResults(out, ctx) {
       $("results-status").textContent = "Couldn't copy automatically; copy the address from your browser's address bar instead.";
     }
   };
+  const savePdf = () => {
+    const opened = [...out.querySelectorAll("details.print-open")].filter(d => !d.open);
+    opened.forEach(d => { d.open = true; });
+    const oldTitle = document.title;
+    document.title = `WALS ${A.id} x ${B.id} results`;
+    document.body.classList.add("printing");
+    if (map) map.invalidateSize(false);
+    const restore = () => {
+      opened.forEach(d => { d.open = false; });
+      document.title = oldTitle;
+      document.body.classList.remove("printing");
+      if (map) map.invalidateSize(false);
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    setTimeout(() => window.print(), 400);
+  };
+  out.prepend(el("div", { class: "print-only print-header" },
+    el("p", {}, el("strong", {}, "WALS Feature Explorer"), ` · ${new Date().toLocaleDateString()} · ${DATA.version}`),
+    el("p", {}, `Link to this analysis: ${location.href}`)));
   out.append(el("div", { class: "toolbar" },
+    el("button", { type: "button", class: "button primary", onclick: savePdf,
+      "aria-describedby": "pdf-hint" }, "Save as PDF (for your homework)"),
     el("a", { class: "button", href: `https://wals.info/combinations/${A.id}_${B.id}`, target: "_blank", rel: "noopener" },
       "Open this combination on WALS", el("span", { class: "visually-hidden" }, " (opens in a new tab)")),
     el("button", { type: "button", class: "button", onclick: csvLanguages }, "Download language list (CSV)"),
     el("button", { type: "button", class: "button", onclick: csvTables }, "Download tables (CSV)"),
     el("button", { type: "button", class: "button", onclick: copyLink }, "Copy link to this analysis")));
+  out.append(el("p", { class: "status", id: "pdf-hint" },
+    "“Save as PDF” opens your browser's print window with just these results laid out for paper. ",
+    "Choose “Save as PDF” (or “Microsoft Print to PDF”) as the destination."));
 
   out.append(el("nav", { class: "results-nav", "aria-label": "Sections of these results" },
     el("ul", {}, [
@@ -449,10 +490,10 @@ function renderMap(out, { A, B, records, rows, cols, m1 }) {
     "Use the map's + and − buttons or your keyboard's arrow keys and +/− after selecting the map to pan and zoom; click a dot for details."));
 
   const filterId = "map-filter";
-  const filter = el("select", { id: filterId },
+  const filter = el("select", { id: filterId, class: "no-print" },
     el("option", { value: "", text: `All combinations (${records.length} languages)` }),
     combos.map((c, k) => el("option", { value: String(k), text: `${c.label} (${c.n})` })));
-  out.append(el("div", { class: "field" }, el("label", { for: filterId, text: "Show on the map" }), filter));
+  out.append(el("div", { class: "field no-print" }, el("label", { for: filterId, text: "Show on the map" }), filter));
 
   const mapDiv = el("div", { id: "map", role: "region", "aria-label": `Map of ${records.length} languages coloured by their combination of ${A.id} and ${B.id} values. The same data is in the tables below.` });
   out.append(mapDiv);
@@ -579,24 +620,24 @@ function verdict(p, what) {
 
 function renderModel1(out, { A, B, rows, cols, m1 }) {
   out.append(sectionHeading("sec-m1", "Model 1: all languages counted"));
-  out.append(el("p", {}, "Every language counts once. This is the standard chi-square test of independence. ",
-    "It treats each language as an independent observation, which they are not: related languages and neighbouring languages tend to resemble each other. ",
-    "Models 2 and 3 address that."));
+  out.append(el("p", {}, "Every language counts once. ",
+    `To get the p-value, the tool shuffles the ${B.id} values among the languages ${m1.reps.toLocaleString()} times, which breaks any real connection between the two features, `,
+    "and counts how often a shuffled version looks as strongly associated as the real data. ",
+    "This model treats every language as independent, which they are not: related and neighbouring languages tend to resemble each other. Models 2 and 3 address that."));
   const T = m1.test;
   out.append(facts([
-    ["Chi-square (χ²)", T.testable ? `${fmt(T.x2)} with ${T.df} degrees of freedom` : "—"],
-    ["p-value (chi-square approximation)", fmtP(T.p)],
-    [`p-value (permutation, ${m1.reps} shuffles)`, fmtP(m1.permP)],
-    ["Cramér's V (strength, 0 to 1)", T.testable ? `${fmt(T.cramersV)} (${sizeWord(T.cramersV)})` : "—"],
+    ["p-value", fmtP(m1.permP)],
+    ["Strength of association (0 to 1)", T.testable ? `${fmt(T.cramersV)} (${sizeWord(T.cramersV)})` : "—"],
   ]));
-  if (T.testable && T.smallExpectedShare > 0.2) {
-    out.append(el("p", { class: "warning" },
-      `${pct(T.smallExpectedShare)} of the cells have an expected count below 5, so the chi-square approximation is unreliable here. `,
-      "Use the permutation p-value instead."));
-  }
   out.append(el("p", {}, verdict(m1.permP, "across all languages")));
   out.append(matrixTable({
-    caption: "Adjusted residuals: how far each combination is from what independence predicts. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
+    caption: "Which combinations stand out: each number (an adjusted residual) shows how far a combination is from what you would expect if the features were unrelated. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
+    key: [
+      ["pos strong", `${KEY["pos strong"]} (residual +2 or higher)`],
+      ["pos", `${KEY.pos} (between 0 and +2)`],
+      ["neg", `${KEY.neg} (between 0 and −2)`],
+      ["neg strong", `${KEY["neg strong"]} (residual −2 or lower)`],
+    ],
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
     cell: (i, j) => residualCell(T.residuals[i][j], m1.table[i][j], T.expected[i][j]),
   }));
@@ -607,27 +648,27 @@ function renderModel1(out, { A, B, rows, cols, m1 }) {
 function renderModel2(out, { A, B, rows, cols, m2 }) {
   out.append(sectionHeading("sec-m2", "Model 2: one language per genus"));
   out.append(el("p", {}, "Languages in the same genus (a group of clearly related languages, such as Germanic or Romance) often share features because they inherited them. ",
-    `This model draws ${m2.draws} random samples with exactly one language from each genus and runs the chi-square test on each sample. `,
+    `This model draws ${m2.draws} random samples with exactly one language from each genus, and gets a p-value for each sample by shuffling, as in Model 1. `,
     "If the association is real rather than an effect of a few large families, it should show up in most samples."));
   out.append(facts([
     ["Genera (= languages per sample)", String(m2.genera)],
-    ["Median chi-square across samples", m2.tested ? `${fmt(m2.medianX2)} with ${m2.df} degrees of freedom` : "—"],
-    ["Median p-value", fmtP(m2.medianP)],
-    ["Middle half of p-values", m2.tested ? `${fmtP(m2.pQuartiles[0])} to ${fmtP(m2.pQuartiles[1])}` : "—"],
     ["Samples with p below 0.05", pct(m2.shareSignificant)],
-    ["Median Cramér's V", m2.tested ? `${fmt(m2.medianV)} (${sizeWord(m2.medianV)})` : "—"],
+    ["Typical p-value (median)", fmtP(m2.medianP)],
+    ["Typical strength (0 to 1)", m2.tested ? `${fmt(m2.medianV)} (${sizeWord(m2.medianV)})` : "—"],
   ]));
   const s = m2.shareSignificant;
   out.append(el("p", {}, !Number.isFinite(s) ? "No test is possible for this pair."
     : s >= 0.8 ? "The association holds up in nearly all one-per-genus samples, so it is not just an effect of a few large genera."
       : s >= 0.5 ? "The association shows up in most, but not all, one-per-genus samples: it is weaker once relatedness is controlled for."
         : "The association does not hold up consistently once each genus counts only once."));
-  if (m2.weightedTest.testable && m2.weightedTest.smallExpectedShare > 0.2) {
-    out.append(el("p", { class: "warning" }, "Many cells have small expected counts, so individual sample p-values are rough. Look at the pattern across samples rather than any single number."));
-  }
   const W = m2.weighted, WT = m2.weightedTest;
   out.append(matrixTable({
     caption: "Genus-weighted counts: each genus counts once in total, shared among its languages. The ratio compares each count with what independence predicts (×1.0 = as expected); ×1.5 or more is marked “more”, ×0.67 or less “fewer”.",
+    key: [
+      ["pos strong", `${KEY["pos strong"]} (ratio ×1.5 or more)`],
+      ["neg strong", `${KEY["neg strong"]} (ratio ×0.67 or less)`],
+      ["", "No shading: close to expected, or too few languages expected to judge"],
+    ],
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(W),
     cell: (i, j) => {
       const o = W[i][j], e = WT.expected[i][j];
@@ -645,15 +686,12 @@ function renderModel2(out, { A, B, rows, cols, m2 }) {
 function renderModel3(out, { A, B, rows, cols, m1, m3 }) {
   out.append(sectionHeading("sec-m3", "Model 3: controlling for area"));
   out.append(el("p", {}, "Neighbouring languages influence each other, so a pattern can be common in one part of the world for historical reasons. ",
-    "This model asks whether the two features are associated within each of WALS's six large areas (Africa, Eurasia, Papunesia, Australia, North America, South America), ",
-    "by adding up the chi-square tests done separately in each area. Its permutation p-value shuffles values only among languages of the same area."));
-  const S = m3.strat;
+    "This model asks whether the two features are associated within each of WALS's six large areas (Africa, Eurasia, Papunesia, Australia, North America, South America). ",
+    `Its p-value comes from shuffling, as in Model 1, but values are only shuffled among languages of the same area (${m3.reps.toLocaleString()} times).`));
   const areasWithData = m3.areaSummaries.filter(s => s.n > 0).length;
   out.append(facts([
     ["Areas with data", `${areasWithData} of ${DATA.macroareas.length}`],
-    ["Within-area chi-square (sum)", S.testable ? `${fmt(S.x2)} with ${S.df} degrees of freedom` : "—"],
-    ["p-value (chi-square approximation)", fmtP(S.p)],
-    [`p-value (permutation within areas, ${m3.reps} shuffles)`, fmtP(m3.permP)],
+    ["p-value", fmtP(m3.permP)],
   ]));
   out.append(el("p", {}, verdict(m3.permP, "within areas")));
   out.append(el("p", {}, "The next table shows how consistent each combination is across areas. ",
@@ -661,6 +699,11 @@ function renderModel3(out, { A, B, rows, cols, m1, m3 }) {
     "A combination that is over-represented in all or nearly all areas is a strong candidate for a real cross-linguistic preference (this is the logic of Dryer's areal method)."));
   out.append(matrixTable({
     caption: "Areas in which each combination is more common than expected (genera weighted equally within each area)",
+    key: [
+      ["pos strong", "Dark blue: more common than expected in at least 80% of the areas where it can occur (3 or more areas)"],
+      ["neg strong", "Dark orange: more common than expected in at most 20% of those areas, i.e. consistently rare"],
+      ["", "No shading: mixed across areas, or found in fewer than 3 areas"],
+    ],
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
     cell: (i, j) => {
       const c = m3.consistency[i][j];
@@ -677,9 +720,7 @@ function renderModel3(out, { A, B, rows, cols, m1, m3 }) {
     details.append(el("h4", {}, `${name}: ${s.n} languages in ${s.genera} genera`));
     if (!s.n) { details.append(el("p", {}, "No languages in this area are coded for both features.")); return; }
     const use = nonEmpty(s.table);
-    details.append(el("p", {}, s.test.testable
-      ? `Chi-square ${fmt(s.test.x2)} with ${s.test.df} degrees of freedom (approximate p ${fmtP(s.test.p)}).`
-      : "Only one value of a feature occurs here, so no test is possible in this area."));
+    if (!s.test.testable) details.append(el("p", {}, "Only one value of a feature occurs in this area."));
     details.append(matrixTable({
       caption: `${name}: number of languages with each combination`,
       A, B, rowVals: rows, colVals: cols, use,
@@ -692,23 +733,23 @@ function renderModel3(out, { A, B, rows, cols, m1, m3 }) {
 // ----- help -----
 
 function renderHelp(out) {
-  out.append(sectionHeading("sec-help", "How to read these results"));
+  out.append(el("h3", { id: "sec-help", tabindex: "-1", class: "no-print" }, "How to read these results"));
   const items = [
-    ["What is a p-value?", "The p-value is the probability of seeing an association at least this strong if the two features were in fact unrelated. Small values (by convention, below 0.05) suggest the association is not just chance. A p-value does not tell you how strong or how interesting an association is, and with many languages even tiny associations get small p-values."],
-    ["Why two p-values?", "The chi-square approximation is quick but becomes unreliable when many cells have small expected counts, which is common with WALS features. The permutation p-value shuffles one feature's values among the languages thousands of times and counts how often the shuffled data look as associated as the real data. It makes no approximation, so prefer it when the two disagree."],
-    ["What is an adjusted residual?", "For each combination, the residual compares the observed number of languages with the number expected if the features were independent, scaled so that values beyond about ±2 are unusual. Positive means more languages than expected; negative means fewer. Residuals tell you which combinations drive an association."],
-    ["What is Cramér's V?", "A measure of strength from 0 (no association) to 1 (each value of one feature predicts the other perfectly). The words weak, moderate and strong are rough guides only."],
+    ["What is a p-value?", "Imagine the two features had nothing to do with each other. The tool simulates that by shuffling one feature's values among the languages many times. The p-value is the share of shuffles that look at least as associated as the real data. A small p-value (by convention, below 0.05) means the real pattern would be surprising if the features were unrelated. A p-value does not tell you how strong or how interesting an association is; with many languages even weak associations get small p-values."],
+    ["What do the numbers in the “which combinations stand out” table mean?", "Each one compares how many languages have that combination with how many you would expect if the features were unrelated (these numbers are called adjusted residuals). Positive means more languages than expected; negative means fewer. Values beyond about ±2 stand out. They tell you which combinations make up the pattern."],
+    ["What does “strength of association” mean?", "A number from 0 (no association) to 1 (each value of one feature predicts the other perfectly). Statisticians call it Cramér's V. The words weak, moderate and strong are rough guides only."],
     ["Why three models?", "Languages are not independent observations. Related languages share features by inheritance (Model 2 handles this by counting each genus once) and neighbouring languages share features by contact (Model 3 handles this by looking within areas). An association that survives all three models is much more convincing than one that appears only in Model 1."],
     ["Things to keep in mind", "WALS's languages are not a random sample of the world's languages, and different features were coded for different sets of languages. Features in the same WALS chapter may be defined in terms of each other. A statistical association says nothing by itself about why the features go together; that is for you to think about."],
   ];
-  items.forEach(([q, a]) => out.append(el("details", {}, el("summary", {}, q), el("p", {}, a))));
+  out.append(el("div", { class: "help-block" },
+    items.map(([q, a]) => el("details", {}, el("summary", {}, q), el("p", {}, a)))));
 }
 
 // ----- CSV of all tables -----
 
 function tablesCsv({ A, B, rows, cols, m1, m2, m3 }) {
   const lines = [];
-  const header = [`${A.id} \\ ${B.id}`, ...cols.map(c => B.values[c])];
+  const header = [`${A.id} × ${B.id}`, ...cols.map(c => B.values[c])];
   const block = (title, f) => {
     lines.push(csvLine([title]));
     lines.push(csvLine(header));
@@ -720,9 +761,9 @@ function tablesCsv({ A, B, rows, cols, m1, m2, m3 }) {
   block("Adjusted residuals (Model 1)", (i, j) => (m1.test.residuals[i][j] === null ? "" : fmt(m1.test.residuals[i][j], 3)));
   block("Genus-weighted counts (Model 2)", (i, j) => fmt(m2.weighted[i][j], 3));
   block("Areas where over-represented (Model 3)", (i, j) => `${m3.consistency[i][j].over}/${m3.consistency[i][j].possible}`);
-  lines.push(csvLine(["Model 1 chi-square", fmt(m1.test.x2, 3), "df", m1.test.df, "p (approx)", m1.test.p, "p (permutation)", m1.permP, "Cramer's V", fmt(m1.test.cramersV, 3)]));
-  lines.push(csvLine(["Model 2 genera", m2.genera, "median p", m2.medianP, "share p<0.05", fmt(m2.shareSignificant, 3), "median V", fmt(m2.medianV, 3)]));
-  lines.push(csvLine(["Model 3 within-area chi-square", fmt(m3.strat.x2, 3), "df", m3.strat.df, "p (approx)", m3.strat.p, "p (permutation)", m3.permP]));
+  lines.push(csvLine(["Model 1", "p-value", m1.permP, "strength (Cramer's V)", fmt(m1.test.cramersV, 3)]));
+  lines.push(csvLine(["Model 2", "genera", m2.genera, "samples with p<0.05", fmt(m2.shareSignificant, 3), "median p", m2.medianP, "median strength", fmt(m2.medianV, 3)]));
+  lines.push(csvLine(["Model 3", "p-value", m3.permP]));
   lines.push(csvLine(["Data", DATA.version]));
   return lines.join("\n");
 }

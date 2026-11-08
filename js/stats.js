@@ -173,8 +173,9 @@ export function modelAllLanguages(records, rows, cols, { reps = 2000, seed = 1 }
 
 // Model 2: genealogical control. (a) Genus-weighted table: each genus
 // counts once in total, split evenly among its languages. (b) Repeated
-// random samples of one language per genus, each tested separately.
-export function modelGenusSampling(records, rows, cols, { draws = 1000, seed = 2 } = {}) {
+// random samples of one language per genus, each given its own
+// permutation p-value.
+export function modelGenusSampling(records, rows, cols, { draws = 100, reps = 200, seed = 2 } = {}) {
   const byGenus = new Map();
   for (const r of records) {
     if (!byGenus.has(r.genus)) byGenus.set(r.genus, []);
@@ -183,27 +184,24 @@ export function modelGenusSampling(records, rows, cols, { draws = 1000, seed = 2
   const genera = [...byGenus.values()];
   const weighted = crossTable(records, rows, cols, r => 1 / byGenus.get(r.genus).length);
   const rng = makeRng(seed);
-  const x2s = [], ps = [], vs = [];
+  const ps = [], vs = [];
   let sig = 0, tested = 0;
   for (let d = 0; d < draws; d++) {
     const sample = genera.map(g => g[Math.floor(rng() * g.length)]);
     const res = chiSquareTest(crossTable(sample, rows, cols));
     if (!res.testable) continue;
     tested++;
-    x2s.push(res.x2); ps.push(res.p); vs.push(res.cramersV);
-    if (res.p < 0.05) sig++;
+    const p = permutationP(sample, rows, cols, { reps, rng }).p;
+    ps.push(p); vs.push(res.cramersV);
+    if (p < 0.05) sig++;
   }
-  x2s.sort((a, b) => a - b); ps.sort((a, b) => a - b); vs.sort((a, b) => a - b);
-  const sampleSize = genera.length;
-  const df = chiSquareTest(weighted).df;
+  ps.sort((a, b) => a - b); vs.sort((a, b) => a - b);
   return {
-    genera: sampleSize,
+    genera: genera.length,
     weighted,
     weightedTest: chiSquareTest(weighted),
-    draws, tested, df,
-    medianX2: quantile(x2s, 0.5),
+    draws, reps, tested,
     medianP: quantile(ps, 0.5),
-    pQuartiles: [quantile(ps, 0.25), quantile(ps, 0.75)],
     medianV: quantile(vs, 0.5),
     shareSignificant: tested ? sig / tested : NaN,
   };

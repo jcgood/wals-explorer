@@ -92,9 +92,29 @@ with sync_playwright() as p:
         page.select_option("#map-filter", "0")
         page.click("#view-row")
 
+        if "chi-square" in page.inner_text("#results").lower():
+            problems.append("results still mention chi-square")
+        if page.locator(".color-key").count() < 3:
+            problems.append("colour keys missing under shaded tables")
+        if "\\" in page.inner_text("#results table thead"):
+            problems.append("table corner still uses a backslash")
+
         if SHOTS:
             SHOTS.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(SHOTS / f"full-{scheme}.png"), full_page=True)
+            if scheme == "light":
+                # Print layout, as "Save as PDF" produces it (minus the dialog).
+                page.evaluate("""() => {
+                  document.querySelectorAll('#results details.print-open').forEach(d => d.open = true);
+                  document.body.classList.add('printing');
+                  window.dispatchEvent(new Event('resize'));
+                }""")
+                page.wait_for_timeout(1500)
+                page.emulate_media(media="print")
+                page.pdf(path=str(SHOTS / "results.pdf"), format="Letter", print_background=True,
+                         margin={"top": "0.5in", "bottom": "0.5in", "left": "0.5in", "right": "0.5in"})
+                page.emulate_media(media="screen")
+                page.evaluate("document.body.classList.remove('printing')")
         axe(page, f"{scheme}, results shown")
 
         # Reload: the hash restores the analysis.

@@ -161,6 +161,16 @@ td.neg.strong { background: var(--neg-strong-bg); font-weight: 600; }
 .cell-sub { display: block; font-size: 0.82rem; color: var(--muted); }
 td.pos .cell-sub, td.neg .cell-sub { color: inherit; }
 
+.color-key { list-style: none; padding: 0; margin: -0.5rem 0 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; font-size: 0.9rem; color: var(--muted); }
+.color-key li { display: flex; align-items: center; gap: 0.4rem; }
+.key-swatch { width: 1.1rem; height: 0.9rem; border: 1px solid var(--border); border-radius: 0.15rem; flex: none; background: var(--bg); }
+.key-swatch.pos { background: var(--pos-bg); }
+.key-swatch.pos.strong { background: var(--pos-strong-bg); }
+.key-swatch.neg { background: var(--neg-bg); }
+.key-swatch.neg.strong { background: var(--neg-strong-bg); }
+
+.print-only { display: none; }
+
 .view-toggle { border: none; padding: 0; margin: 0.25rem 0; display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .view-toggle legend { padding: 0; margin-bottom: 0.25rem; }
 
@@ -178,6 +188,41 @@ summary { cursor: pointer; font-weight: 600; }
 .visually-hidden {
   position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Map at a paper-friendly size while printing (set from JS before print). */
+body.printing #map { width: 680px; height: 360px; }
+
+@media print {
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --bg: #ffffff; --surface: #f1f2f4; --text: #000000; --muted: #333333; --border: #999999;
+    --accent: #0a3d91; --pos-bg: #d7e7fb; --pos-strong-bg: #a9cbf5; --neg-bg: #fde3cf; --neg-strong-bg: #f8c39c;
+    --warn-bg: #fff4ce; --warn-border: #b38600; color-scheme: light;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 10.5pt; background: #fff; color: #000; }
+  .wrap { max-width: none; padding: 0; }
+  .skip-link, .lede, #features-section, #pairs-section, #results-placeholder, #results-status,
+  .toolbar, #pdf-hint, .results-nav, .no-print, .help-block, details:not(.print-open),
+  .leaflet-control-container, .site-footer p:last-child { display: none !important; }
+  .print-only { display: block; }
+  .print-header p { margin: 0 0 0.2rem; font-size: 9pt; word-break: break-all; }
+  .site-header { padding: 0 0 0.3rem; margin-bottom: 0.5rem; }
+  .site-header h1 { font-size: 14pt; }
+  #results-section > h2 { display: none; }
+  h3 { break-after: avoid; margin-top: 1rem; }
+  h4 { break-after: avoid; }
+  .table-scroll { overflow: visible; }
+  table { font-size: 8.5pt; }
+  th, td { padding: 0.15rem 0.35rem; }
+  .cell-sub { font-size: 7pt; }
+  caption { padding: 0.3rem 0.35rem; }
+  .color-key { font-size: 8pt; margin-top: -0.6rem; }
+  dl.facts, .note, .warning, p { font-size: 9.5pt; }
+  .table-block, .table-scroll, dl.facts, .legend, #map { break-inside: avoid; }
+  details.print-open > summary { list-style: none; }
+  details.print-open > summary::-webkit-details-marker { display: none; }
+  .site-footer { margin-top: 1rem; border-top: 1px solid #999; }
 }
 
 @media (prefers-reduced-motion: reduce) {

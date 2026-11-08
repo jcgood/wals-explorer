@@ -13,14 +13,23 @@ features (81A but not 81B). For each pair, students get:
    on wals.info.
 2. **Descriptive statistics**: counts, row and column percentages, and the
    number of languages, genera, families and languages per area.
-3. **Model 1, all languages**: Pearson chi-square test of independence,
-   with a permutation p-value, Cramér's V, and adjusted residuals.
-4. **Model 2, one language per genus**: 1,000 random samples with one
-   language per WALS genus, each tested, plus a genus-weighted table.
-5. **Model 3, areal control**: chi-square summed within WALS's six
-   macroareas (a test of association within areas), a permutation p-value
-   that shuffles only within areas, and a Dryer-style count of the areas in
-   which each combination is over-represented (genera weighted equally).
+3. **Model 1, all languages**: a permutation p-value (2,000 shuffles of
+   one feature's values; the statistic shuffled is Pearson's chi-square),
+   strength of association (Cramér's V), and adjusted residuals.
+4. **Model 2, one language per genus**: 100 random samples with one
+   language per WALS genus, each with its own permutation p-value (200
+   shuffles); reports the share of samples with p < 0.05, plus a
+   genus-weighted table.
+5. **Model 3, areal control**: a permutation p-value that shuffles only
+   within WALS's six macroareas (a test of association within areas), and
+   a Dryer-style count of the areas in which each combination is
+   over-represented (genera weighted equally).
+
+Only permutation p-values are shown, to keep things simple for students
+and because the chi-square approximation is unreliable for the sparse
+tables WALS pairs often produce. A **Save as PDF** button prints just the
+current pair's results (about five pages) through the browser's print
+dialog, which keeps real, selectable text.
 
 Everything runs in the browser. There is no server, no build step and no
 dependencies apart from [Leaflet](https://leafletjs.com) for the map.
