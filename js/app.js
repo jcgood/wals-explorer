@@ -1,5 +1,5 @@
 import { buildRecords, valueLists } from "./data.js";
-import { modelAllLanguages, modelGenusSampling, modelArealControl } from "./stats.js";
+import { modelAllLanguages, modelControlled, areaTables } from "./stats.js";
 
 // ---------- settings ----------
 
@@ -7,8 +7,15 @@ const SLOTS = 3;                 // features per list
 const MIN_LANGS = 250;           // features coded for fewer languages aren't offered
 const SMALL_PAIR = 100;          // pairs sharing fewer languages get a warning
 const PERM_REPS = 2000;
-const GENUS_DRAWS = 100;         // one-per-genus samples (Model 2)
-const GENUS_REPS = 200;          // shuffles per sample (Model 2)
+
+// Pairs where one feature's "no ..." value largely forces the other's
+// (found in the 2026-11-08 statistics review), so an association is
+// partly built into the coding.
+const DEFINITIONAL = [
+  ["49A", "51A", "“no morphological case” (49A) nearly always goes with “no case affixes” (51A)"],
+  ["50A", "51A", "“no case-marking” (50A) nearly always goes with “no case affixes” (51A)"],
+  ["102A", "103A", "languages with no verbal person marking (102A) are always coded “no person marking” in 103A"],
+];
 const STORAGE_KEY = "wals-explorer-v1";
 
 const MORPH_AREAS = ["Morphology", "Nominal Categories", "Verbal Categories"];
@@ -56,11 +63,15 @@ function fmtP(p) {
   return p.toFixed(3);
 }
 
-function sizeWord(v) {
+// Strength words scaled to table size (Cohen's guidelines for Cramér's V:
+// small/medium/large = 0.1/0.3/0.5 divided by the square root of
+// min(rows, columns) - 1), so bigger tables aren't all labelled "weak".
+function sizeWord(v, k = 1) {
   if (!Number.isFinite(v)) return "";
-  if (v < 0.1) return "negligible";
-  if (v < 0.3) return "weak";
-  if (v < 0.5) return "moderate";
+  const s = Math.sqrt(Math.max(1, k));
+  if (v < 0.1 / s) return "very weak";
+  if (v < 0.3 / s) return "weak";
+  if (v < 0.5 / s) return "moderate";
   return "strong";
 }
 
@@ -313,12 +324,19 @@ function matrixTable({ caption, A, B, rowVals, colVals, use, cell, totals, key }
   return key ? el("div", { class: "table-block" }, scroll, colorKey(key)) : scroll;
 }
 
+// Cells where fewer than MIN_EXPECTED languages are expected aren't
+// highlighted: one or two languages can produce huge residuals there.
+const MIN_EXPECTED = 1;
+
 function residualCell(r, o, e) {
-  if (r === null) return { text: "—" };
+  if (r === null || r === undefined) return { text: "—" };
+  if (e < MIN_EXPECTED) {
+    return { text: "—", sub: `observed ${fmt(o, 0)}, expected ${fmt(e, 1)}: too few to judge` };
+  }
   const strong = Math.abs(r) >= 2;
   const word = strong ? (r > 0 ? " more" : " fewer") : "";
   return {
-    text: `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}${word}`,
+    text: Math.abs(r) < 0.05 ? "0.0" : `${r > 0 ? "+" : "−"}${Math.abs(r).toFixed(1)}${word}`,
     sub: `observed ${fmt(o, Number.isInteger(o) ? 0 : 1)}, expected ${fmt(e, 1)}`,
     cls: r > 0 ? `pos${strong ? " strong" : ""}` : r < 0 ? `neg${strong ? " strong" : ""}` : "",
   };
@@ -375,9 +393,9 @@ function renderResults({ focus = false } = {}) {
       return;
     }
     const m1 = modelAllLanguages(records, rows, cols, { reps: PERM_REPS });
-    const m2 = modelGenusSampling(records, rows, cols, { draws: GENUS_DRAWS, reps: GENUS_REPS });
-    const m3 = modelArealControl(records, rows, cols, DATA.macroareas.length, { reps: PERM_REPS });
-    renderPairResults(out, { A, B, records, rows, cols, m1, m2, m3 });
+    const m2 = modelControlled(records, rows, cols, r => `${DATA.genusFamily[r.genus]}|${r.area}`, { reps: PERM_REPS });
+    const areas = areaTables(records, rows, cols, DATA.macroareas.length);
+    renderPairResults(out, { A, B, records, rows, cols, m1, m2, areas });
     $("results-status").textContent = `Results ready for ${title}.`;
     if (focus) $("res-title").focus();
   }, 30);
@@ -396,7 +414,14 @@ function renderPairResults(out, ctx) {
   if (records.length < SMALL_PAIR) {
     out.append(el("p", { class: "warning" },
       `Only ${records.length} languages are coded for both features. With so few, the tables are sparse and the results are fragile, `,
-      "especially for Model 2 (one language per genus) and Model 3 (within areas). Treat any pattern here as tentative."));
+      "especially for Model 2 (controlling for family and area). Treat any pattern here as tentative."));
+  }
+
+  const defn = DEFINITIONAL.find(([x, y]) => (x === A.id && y === B.id) || (x === B.id && y === A.id));
+  if (defn) {
+    out.append(el("p", { class: "warning" },
+      `These two features overlap by definition: ${defn[2]}. Part of any association between them is built into how WALS codes them, `,
+      "so focus on the other combinations of values."));
   }
 
   if (A.chapter === B.chapter) {
@@ -459,14 +484,13 @@ function renderPairResults(out, ctx) {
   out.append(el("nav", { class: "results-nav", "aria-label": "Sections of these results" },
     el("ul", {}, [
       ["sec-map", "Map"], ["sec-desc", "Descriptive statistics"], ["sec-m1", "Model 1: all languages"],
-      ["sec-m2", "Model 2: one language per genus"], ["sec-m3", "Model 3: controlling for area"], ["sec-help", "How to read these results"],
+      ["sec-m2", "Model 2: controlling for family and area"], ["sec-help", "How to read these results"],
     ].map(([id, t]) => el("li", {}, el("a", { href: `#${id}`, onclick: e => { e.preventDefault(); $(id).focus(); $(id).scrollIntoView(); } }, t))))));
 
   renderMap(out, ctx);
   renderDescriptive(out, ctx);
   renderModel1(out, ctx);
   renderModel2(out, ctx);
-  renderModel3(out, ctx);
   renderHelp(out);
 }
 
@@ -560,7 +584,7 @@ function renderMap(out, { A, B, records, rows, cols, m1 }) {
 
 // ----- descriptive statistics -----
 
-function renderDescriptive(out, { A, B, records, rows, cols, m1 }) {
+function renderDescriptive(out, { A, B, records, rows, cols, m1, areas }) {
   out.append(sectionHeading("sec-desc", "Descriptive statistics"));
   const byArea = DATA.macroareas.map((name, k) => [name, records.filter(r => r.area === k).length]);
   out.append(facts([
@@ -607,6 +631,19 @@ function renderDescriptive(out, { A, B, records, rows, cols, m1 }) {
 
   const hidden = (t.length - use.rows.length) + (t[0].length - use.cols.length);
   if (hidden) out.append(el("p", { class: "status" }, `${hidden} value${hidden > 1 ? "s" : ""} with no languages in this comparison ${hidden > 1 ? "are" : "is"} left out of the tables.`));
+
+  const details = el("details", {}, el("summary", {}, "Show the table for each area"));
+  areas.forEach(s => {
+    const name = DATA.macroareas[s.area];
+    details.append(el("h4", {}, `${name}: ${s.n} languages in ${s.genera} genera`));
+    if (!s.n) { details.append(el("p", {}, "No languages in this area are coded for both features.")); return; }
+    details.append(matrixTable({
+      caption: `${name}: number of languages with each combination`,
+      A, B, rowVals: rows, colVals: cols, use: nonEmpty(s.table),
+      cell: (i, j) => ({ text: String(s.table[i][j]) }),
+    }));
+  });
+  out.append(details);
 }
 
 // ----- model 1 -----
@@ -623,111 +660,54 @@ function renderModel1(out, { A, B, rows, cols, m1 }) {
   out.append(el("p", {}, "Every language counts once. ",
     `To get the p-value, the tool shuffles the ${B.id} values among the languages ${m1.reps.toLocaleString()} times, which breaks any real connection between the two features, `,
     "and counts how often a shuffled version looks as strongly associated as the real data. ",
-    "This model treats every language as independent, which they are not: related and neighbouring languages tend to resemble each other. Models 2 and 3 address that."));
+    "This model treats every language as independent, which they are not: related and neighbouring languages tend to resemble each other, ",
+    "so it often finds associations that are really just shared history. Use it as a starting point; Model 2 is the more trustworthy test."));
   const T = m1.test;
+  const u = nonEmpty(m1.table);
+  const k = Math.min(u.rows.length, u.cols.length) - 1;
   out.append(facts([
     ["p-value", fmtP(m1.permP)],
-    ["Strength of association (0 to 1)", T.testable ? `${fmt(T.cramersV)} (${sizeWord(T.cramersV)})` : "—"],
+    ["Strength of association (0 to 1)", T.testable ? `${fmt(T.cramersV)} (${sizeWord(T.cramersV, k)} for a table this size)` : "—"],
   ]));
   out.append(el("p", {}, verdict(m1.permP, "across all languages")));
   out.append(matrixTable({
     caption: "Which combinations stand out: each number (an adjusted residual) shows how far a combination is from what you would expect if the features were unrelated. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
-    key: [
-      ["pos strong", `${KEY["pos strong"]} (residual +2 or higher)`],
-      ["pos", `${KEY.pos} (between 0 and +2)`],
-      ["neg", `${KEY.neg} (between 0 and −2)`],
-      ["neg strong", `${KEY["neg strong"]} (residual −2 or lower)`],
-    ],
+    key: RESIDUAL_KEY,
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
     cell: (i, j) => residualCell(T.residuals[i][j], m1.table[i][j], T.expected[i][j]),
   }));
 }
 
+const RESIDUAL_KEY = [
+  ["pos strong", `${KEY["pos strong"]} (+2 or higher)`],
+  ["pos", `${KEY.pos} (between 0 and +2)`],
+  ["neg", `${KEY.neg} (between 0 and −2)`],
+  ["neg strong", `${KEY["neg strong"]} (−2 or lower)`],
+  ["", `No shading, “—”: fewer than ${MIN_EXPECTED} language expected, too few to judge`],
+];
+
 // ----- model 2 -----
 
-function renderModel2(out, { A, B, rows, cols, m2 }) {
-  out.append(sectionHeading("sec-m2", "Model 2: one language per genus"));
-  out.append(el("p", {}, "Languages in the same genus (a group of clearly related languages, such as Germanic or Romance) often share features because they inherited them. ",
-    `This model draws ${m2.draws} random samples with exactly one language from each genus, and gets a p-value for each sample by shuffling, as in Model 1. `,
-    "If the association is real rather than an effect of a few large families, it should show up in most samples."));
+function renderModel2(out, { A, B, rows, cols, m1, m2 }) {
+  out.append(sectionHeading("sec-m2", "Model 2: controlling for family and area"));
+  out.append(el("p", {}, "Related languages share features because they inherited them, and neighbouring languages share features through contact. ",
+    "This model groups the languages by family within each of WALS's six large areas (for example, Bantu languages in Africa). ",
+    `It then shuffles the ${B.id} values only among languages of the same group, ${m2.reps.toLocaleString()} times. `,
+    "Each group keeps its own mix of values, so an association only counts if, within groups, languages with one value tend to have the other. ",
+    "This is the more trustworthy of the two tests, but it is still approximate: neighbouring relatives that borrowed from each other can still look like evidence."));
   out.append(facts([
-    ["Genera (= languages per sample)", String(m2.genera)],
-    ["Samples with p below 0.05", pct(m2.shareSignificant)],
-    ["Typical p-value (median)", fmtP(m2.medianP)],
-    ["Typical strength (0 to 1)", m2.tested ? `${fmt(m2.medianV)} (${sizeWord(m2.medianV)})` : "—"],
+    ["p-value", fmtP(m2.p)],
+    ["Languages that count", `${m2.usableLanguages} of ${m1.table.flat().reduce((s, x) => s + x, 0)} (${pct(m2.usableShare)}), in ${m2.usableGroups} groups`],
   ]));
-  const s = m2.shareSignificant;
-  out.append(el("p", {}, !Number.isFinite(s) ? "No test is possible for this pair."
-    : s >= 0.8 ? "The association holds up in nearly all one-per-genus samples, so it is not just an effect of a few large genera."
-      : s >= 0.5 ? "The association shows up in most, but not all, one-per-genus samples: it is weaker once relatedness is controlled for."
-        : "The association does not hold up consistently once each genus counts only once."));
-  const W = m2.weighted, WT = m2.weightedTest;
+  out.append(el("p", { class: "status" },
+    "Languages that are the only member of their group, or in a group where everyone has the same value of a feature, can't be shuffled, so they don't count here."));
+  out.append(el("p", {}, verdict(m2.p, "once family and area are taken into account")));
   out.append(matrixTable({
-    caption: "Genus-weighted counts: each genus counts once in total, shared among its languages. The ratio compares each count with what independence predicts (×1.0 = as expected); ×1.5 or more is marked “more”, ×0.67 or less “fewer”.",
-    key: [
-      ["pos strong", `${KEY["pos strong"]} (ratio ×1.5 or more)`],
-      ["neg strong", `${KEY["neg strong"]} (ratio ×0.67 or less)`],
-      ["", "No shading: close to expected, or too few languages expected to judge"],
-    ],
-    A, B, rowVals: rows, colVals: cols, use: nonEmpty(W),
-    cell: (i, j) => {
-      const o = W[i][j], e = WT.expected[i][j];
-      const ratio = e > 0 ? o / e : NaN;
-      if (e < 1) return { text: `${fmt(o, 1)}`, sub: `expected ${fmt(e, 1)}: too few to judge` };
-      const cls = ratio >= 1.5 ? "pos strong" : ratio <= 1 / 1.5 ? "neg strong" : "";
-      const word = ratio >= 1.5 ? " more" : ratio <= 1 / 1.5 ? " fewer" : "";
-      return { text: `${fmt(o, 1)}${word}`, sub: `expected ${fmt(e, 1)}, ×${fmt(ratio, 1)}`, cls };
-    },
-  }));
-}
-
-// ----- model 3 -----
-
-function renderModel3(out, { A, B, rows, cols, m1, m3 }) {
-  out.append(sectionHeading("sec-m3", "Model 3: controlling for area"));
-  out.append(el("p", {}, "Neighbouring languages influence each other, so a pattern can be common in one part of the world for historical reasons. ",
-    "This model asks whether the two features are associated within each of WALS's six large areas (Africa, Eurasia, Papunesia, Australia, North America, South America). ",
-    `Its p-value comes from shuffling, as in Model 1, but values are only shuffled among languages of the same area (${m3.reps.toLocaleString()} times).`));
-  const areasWithData = m3.areaSummaries.filter(s => s.n > 0).length;
-  out.append(facts([
-    ["Areas with data", `${areasWithData} of ${DATA.macroareas.length}`],
-    ["p-value", fmtP(m3.permP)],
-  ]));
-  out.append(el("p", {}, verdict(m3.permP, "within areas")));
-  out.append(el("p", {}, "The next table shows how consistent each combination is across areas. ",
-    "In each area, genera are weighted equally (as in Model 2), and the table counts the areas where that combination is more common than independence predicts. ",
-    "A combination that is over-represented in all or nearly all areas is a strong candidate for a real cross-linguistic preference (this is the logic of Dryer's areal method)."));
-  out.append(matrixTable({
-    caption: "Areas in which each combination is more common than expected (genera weighted equally within each area)",
-    key: [
-      ["pos strong", "Dark blue: more common than expected in at least 80% of the areas where it can occur (3 or more areas)"],
-      ["neg strong", "Dark orange: more common than expected in at most 20% of those areas, i.e. consistently rare"],
-      ["", "No shading: mixed across areas, or found in fewer than 3 areas"],
-    ],
+    caption: "Which combinations stand out within groups: each number compares a combination's count with what you would expect if, inside each family-and-area group, the features were unrelated. Values beyond ±2 (in bold, marked “more” or “fewer”) stand out.",
+    key: RESIDUAL_KEY,
     A, B, rowVals: rows, colVals: cols, use: nonEmpty(m1.table),
-    cell: (i, j) => {
-      const c = m3.consistency[i][j];
-      if (!c.possible) return { text: "—" };
-      const share = c.over / c.possible;
-      const cls = c.possible >= 3 ? (share >= 0.8 ? "pos strong" : share <= 0.2 ? "neg strong" : "") : "";
-      return { text: `${c.over} of ${c.possible}`, cls };
-    },
+    cell: (i, j) => residualCell(m2.z[i][j], m2.observed[i][j], m2.expected[i][j]),
   }));
-
-  const details = el("details", {}, el("summary", {}, "Show the table for each area"));
-  m3.areaSummaries.forEach(s => {
-    const name = DATA.macroareas[s.area];
-    details.append(el("h4", {}, `${name}: ${s.n} languages in ${s.genera} genera`));
-    if (!s.n) { details.append(el("p", {}, "No languages in this area are coded for both features.")); return; }
-    const use = nonEmpty(s.table);
-    if (!s.test.testable) details.append(el("p", {}, "Only one value of a feature occurs in this area."));
-    details.append(matrixTable({
-      caption: `${name}: number of languages with each combination`,
-      A, B, rowVals: rows, colVals: cols, use,
-      cell: (i, j) => ({ text: String(s.table[i][j]) }),
-    }));
-  });
-  out.append(details);
 }
 
 // ----- help -----
@@ -736,10 +716,11 @@ function renderHelp(out) {
   out.append(el("h3", { id: "sec-help", tabindex: "-1", class: "no-print" }, "How to read these results"));
   const items = [
     ["What is a p-value?", "Imagine the two features had nothing to do with each other. The tool simulates that by shuffling one feature's values among the languages many times. The p-value is the share of shuffles that look at least as associated as the real data. A small p-value (by convention, below 0.05) means the real pattern would be surprising if the features were unrelated. A p-value does not tell you how strong or how interesting an association is; with many languages even weak associations get small p-values."],
-    ["What do the numbers in the “which combinations stand out” table mean?", "Each one compares how many languages have that combination with how many you would expect if the features were unrelated (these numbers are called adjusted residuals). Positive means more languages than expected; negative means fewer. Values beyond about ±2 stand out. They tell you which combinations make up the pattern."],
-    ["What does “strength of association” mean?", "A number from 0 (no association) to 1 (each value of one feature predicts the other perfectly). Statisticians call it Cramér's V. The words weak, moderate and strong are rough guides only."],
-    ["Why three models?", "Languages are not independent observations. Related languages share features by inheritance (Model 2 handles this by counting each genus once) and neighbouring languages share features by contact (Model 3 handles this by looking within areas). An association that survives all three models is much more convincing than one that appears only in Model 1."],
-    ["Things to keep in mind", "WALS's languages are not a random sample of the world's languages, and different features were coded for different sets of languages. Features in the same WALS chapter may be defined in terms of each other. A statistical association says nothing by itself about why the features go together; that is for you to think about."],
+    ["What do the numbers in the “which combinations stand out” tables mean?", "Each one compares how many languages have that combination with how many you would expect if the features were unrelated (statisticians call these residuals). Positive means more languages than expected; negative means fewer. Values beyond about ±2 stand out. They tell you which combinations make up the pattern. Cells where fewer than one language is expected show “—”: a single language there can look dramatic without meaning much."],
+    ["What does “strength of association” mean?", "A number from 0 (no association) to 1 (each value of one feature predicts the other perfectly). Statisticians call it Cramér's V. Tables with many values naturally give smaller numbers, so the word next to it (very weak, weak, moderate, strong) takes the table's size into account. These words are rough guides only."],
+    ["Why two models?", "Languages are not independent observations: related languages share features by inheritance and neighbouring languages share them by contact. Model 1 ignores this and so often finds associations that are really shared history. Model 2 only counts patterns that show up within families in the same area. An association that holds up in Model 2 is much more convincing than one that appears only in Model 1."],
+    ["Testing several pairs", "Each test has about a 1 in 20 chance of coming out “significant” even when the features are unrelated. If you test six pairs, it would not be surprising for one of them to come out that way by chance, so look at the size and shape of a pattern, not just the p-value."],
+    ["Things to keep in mind", "WALS's languages are not a random sample of the world's languages, and different features were coded for different sets of languages. Some features overlap by definition (for example, a language with no case at all has no case affixes either); the page warns you about these. A statistical association says nothing by itself about why the features go together; that is for you to think about."],
   ];
   out.append(el("div", { class: "help-block" },
     items.map(([q, a]) => el("details", {}, el("summary", {}, q), el("p", {}, a)))));
@@ -747,7 +728,7 @@ function renderHelp(out) {
 
 // ----- CSV of all tables -----
 
-function tablesCsv({ A, B, rows, cols, m1, m2, m3 }) {
+function tablesCsv({ A, B, rows, cols, m1, m2 }) {
   const lines = [];
   const header = [`${A.id} × ${B.id}`, ...cols.map(c => B.values[c])];
   const block = (title, f) => {
@@ -759,11 +740,9 @@ function tablesCsv({ A, B, rows, cols, m1, m2, m3 }) {
   block("Counts", (i, j) => m1.table[i][j]);
   block("Expected counts (Model 1)", (i, j) => fmt(m1.test.expected[i][j], 3));
   block("Adjusted residuals (Model 1)", (i, j) => (m1.test.residuals[i][j] === null ? "" : fmt(m1.test.residuals[i][j], 3)));
-  block("Genus-weighted counts (Model 2)", (i, j) => fmt(m2.weighted[i][j], 3));
-  block("Areas where over-represented (Model 3)", (i, j) => `${m3.consistency[i][j].over}/${m3.consistency[i][j].possible}`);
+  block("Within-group residuals (Model 2)", (i, j) => (m2.z[i][j] === null ? "" : fmt(m2.z[i][j], 3)));
   lines.push(csvLine(["Model 1", "p-value", m1.permP, "strength (Cramer's V)", fmt(m1.test.cramersV, 3)]));
-  lines.push(csvLine(["Model 2", "genera", m2.genera, "samples with p<0.05", fmt(m2.shareSignificant, 3), "median p", m2.medianP, "median strength", fmt(m2.medianV, 3)]));
-  lines.push(csvLine(["Model 3", "p-value", m3.permP]));
+  lines.push(csvLine(["Model 2", "p-value", m2.p, "languages that count", m2.usableLanguages, "groups", m2.usableGroups]));
   lines.push(csvLine(["Data", DATA.version]));
   return lines.join("\n");
 }

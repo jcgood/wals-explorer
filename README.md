@@ -13,17 +13,30 @@ features (81A but not 81B). For each pair, students get:
    on wals.info.
 2. **Descriptive statistics**: counts, row and column percentages, and the
    number of languages, genera, families and languages per area.
-3. **Model 1, all languages**: a permutation p-value (2,000 shuffles of
-   one feature's values; the statistic shuffled is Pearson's chi-square),
-   strength of association (Cramér's V), and adjusted residuals.
-4. **Model 2, one language per genus**: 100 random samples with one
-   language per WALS genus, each with its own permutation p-value (200
-   shuffles); reports the share of samples with p < 0.05, plus a
-   genus-weighted table.
-5. **Model 3, areal control**: a permutation p-value that shuffles only
-   within WALS's six macroareas (a test of association within areas), and
-   a Dryer-style count of the areas in which each combination is
-   over-represented (genera weighted equally).
+3. **Model 1, all languages** (uncontrolled baseline): a permutation
+   p-value (2,000 shuffles of one feature's values; the statistic is
+   Pearson's chi-square), strength of association (Cramér's V, with
+   strength words scaled to table size), and adjusted residuals.
+4. **Model 2, controlling for family and area**: languages are grouped by
+   family within WALS macroarea, and one feature's values are shuffled only
+   within groups (a stratified permutation test of conditional
+   independence). Per-cell "stand out" values are pooled
+   (Mantel–Haenszel-style) within-group residuals. Groups that can't vary
+   are left out; typically about half the languages count.
+
+Cells with fewer than one expected language aren't highlighted in either
+"stand out" table. Pairs that overlap by definition (49A/51A, 50A/51A,
+102A/103A) carry a warning.
+
+**How good is the control?** The simulation scripts in `tests/`
+(`null_family.js`, `null_family_fix.js`, `fix_checks.js`) measured
+false-positive rates on WALS data. With features inherited within
+families, the uncontrolled test was wrong up to 97% of the time; the
+family-and-area test 5–7%. With features spread
+locally by contact, it was about 10% (uncontrolled: up to 47%). So Model 2
+is approximate, and the page says so. Proper control would need a
+statistical model with phylogeny and geography built in, which is out of
+scope for a teaching tool.
 
 Only permutation p-values are shown, to keep things simple for students
 and because the chi-square approximation is unreliable for the sparse

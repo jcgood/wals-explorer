@@ -80,7 +80,7 @@ with sync_playwright() as p:
 
         t0 = time.time()
         page.click("#pair-list-ms li:nth-child(1) button:has-text('Show results')")
-        page.wait_for_selector("#sec-m3")
+        page.wait_for_selector("#sec-m2")
         print(f"results rendered in {time.time() - t0:.2f}s")
         focused = page.evaluate("document.activeElement && document.activeElement.id")
         if focused != "res-title":
@@ -94,7 +94,7 @@ with sync_playwright() as p:
 
         if "chi-square" in page.inner_text("#results").lower():
             problems.append("results still mention chi-square")
-        if page.locator(".color-key").count() < 3:
+        if page.locator(".color-key").count() < 2:
             problems.append("colour keys missing under shaded tables")
         if "\\" in page.inner_text("#results table thead"):
             problems.append("table corner still uses a backslash")
@@ -119,7 +119,7 @@ with sync_playwright() as p:
 
         # Reload: the hash restores the analysis.
         page.reload()
-        page.wait_for_selector("#sec-m3")
+        page.wait_for_selector("#sec-m2")
         if page.locator(".pair-list button:has-text('Show results')").count() != N_PAIRS:
             problems.append("pairs not restored from link")
         if "69A" not in page.inner_text("#res-title") or "81A" not in page.inner_text("#res-title"):
@@ -145,12 +145,24 @@ with sync_playwright() as p:
         # A pair with few shared languages carries a warning.
         page.goto(URL + "#m=34A,54A,&s=,,&show=34A~54A")
         page.reload()
-        page.wait_for_selector("#sec-m3")
+        page.wait_for_selector("#sec-m2")
         if "Only 78 languages" not in page.inner_text("#results"):
             problems.append("small-pair warning missing for 34A x 54A")
+
+        # Definitional pairs carry a warning; old models are gone.
+        page.goto(URL + "#m=49A,51A,&s=,,&show=49A~51A")
+        page.reload()
+        page.wait_for_selector("#sec-m2")
+        text = page.inner_text("#results")
+        if "overlap by definition" not in text:
+            problems.append("definitional-pair warning missing for 49A x 51A")
+        if "Model 3" in text or "genus-weighted" in text.lower():
+            problems.append("old Model 2/3 text still present")
+        if "too few to judge" not in text:
+            problems.append("sparse cells not marked 'too few to judge'")
         page.goto(URL + "#m=69A,51A,49A&s=81A,87A,85A&show=69A~81A")
         page.reload()
-        page.wait_for_selector("#sec-m3")
+        page.wait_for_selector("#sec-m2")
 
         # Narrow (phone) layout: no horizontal page scroll.
         page.set_viewport_size({"width": 375, "height": 800})

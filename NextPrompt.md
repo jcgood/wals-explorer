@@ -16,6 +16,15 @@ The Homework 10 assignment text lives in the morphology repo's
 git-ignored content (`Morphology/2026/Homeworks/10-MorphologyHomework.tex`);
 its "NEXT TIME?" notes are what motivated this tool.
 
+**Statistics (2026-11-08, after an adversarial review):** two models now.
+Model 1 = all languages (uncontrolled baseline). Model 2 = permutation
+within family-and-area groups, plus pooled within-group residuals. The old
+one-per-genus and within-area models were dropped: simulations showed they
+let family-inherited features through (wrong 42% and 90% of the time). Jeff:
+"reasonably accurate, but just for learning" -- don't chase further rigor
+(e.g. phylogenetic/spatial regression) unless he asks. Known limit: about
+10% false positives when features spread locally by contact.
+
 ## Things that will bite
 
 - Opening `index.html` as a file fails (the data fetch is blocked); serve it.

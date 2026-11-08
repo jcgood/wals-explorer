@@ -152,14 +152,7 @@ export function permutationP(records, rows, cols, { strata = null, reps = 2000, 
   return { observed, p: (atLeast + 1) / (reps + 1), reps };
 }
 
-function quantile(sorted, q) {
-  if (!sorted.length) return NaN;
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos), hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
-
-// ---------- the three models ----------
+// ---------- the two models ----------
 
 // Model 1: every language counts once.
 export function modelAllLanguages(records, rows, cols, { reps = 2000, seed = 1 } = {}) {
@@ -171,77 +164,68 @@ export function modelAllLanguages(records, rows, cols, { reps = 2000, seed = 1 }
   return { table, test, permP: perm ? perm.p : NaN, reps };
 }
 
-// Model 2: genealogical control. (a) Genus-weighted table: each genus
-// counts once in total, split evenly among its languages. (b) Repeated
-// random samples of one language per genus, each given its own
-// permutation p-value.
-export function modelGenusSampling(records, rows, cols, { draws = 100, reps = 200, seed = 2 } = {}) {
-  const byGenus = new Map();
+// Model 2: controlling for family and area. Languages are grouped by
+// family within macroarea; the p-value shuffles feature-B values only within
+// each group, so each group's overall mix of values is held fixed and only
+// within-group pairings count as evidence. Groups that cannot vary (one
+// language, or one value of either feature) are left out: they add nothing.
+// Simulations (tests/null_family*.js, tests/fix_checks.js) put its false-
+// positive rate at about 5% when features are inherited within families and
+// about 10% when they spread locally by contact; it is approximate.
+//
+// Per cell, a pooled (Mantel-Haenszel) residual: observed count summed over
+// groups, minus the within-group expected counts summed, divided by the
+// square root of the summed within-group (hypergeometric) variances.
+export function modelControlled(records, rows, cols, groupKey, { reps = 2000, seed = 2 } = {}) {
+  const groups = new Map();
   for (const r of records) {
-    if (!byGenus.has(r.genus)) byGenus.set(r.genus, []);
-    byGenus.get(r.genus).push(r);
+    const k = groupKey(r);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
   }
-  const genera = [...byGenus.values()];
-  const weighted = crossTable(records, rows, cols, r => 1 / byGenus.get(r.genus).length);
-  const rng = makeRng(seed);
-  const ps = [], vs = [];
-  let sig = 0, tested = 0;
-  for (let d = 0; d < draws; d++) {
-    const sample = genera.map(g => g[Math.floor(rng() * g.length)]);
-    const res = chiSquareTest(crossTable(sample, rows, cols));
-    if (!res.testable) continue;
-    tested++;
-    const p = permutationP(sample, rows, cols, { reps, rng }).p;
-    ps.push(p); vs.push(res.cramersV);
-    if (p < 0.05) sig++;
+  const usable = [...groups.values()].filter(g =>
+    g.length >= 2 && new Set(g.map(r => r.a)).size > 1 && new Set(g.map(r => r.b)).size > 1);
+  const usableRecords = usable.flat();
+
+  const O = rows.map(() => cols.map(() => 0));
+  const E = rows.map(() => cols.map(() => 0));
+  const V = rows.map(() => cols.map(() => 0));
+  for (const g of usable) {
+    const t = crossTable(g, rows, cols);
+    const { rowSums, colSums, n } = margins(t);
+    t.forEach((row, i) => row.forEach((o, j) => {
+      const r = rowSums[i], c = colSums[j];
+      O[i][j] += o;
+      E[i][j] += r * c / n;
+      V[i][j] += r * c * (n - r) * (n - c) / (n * n * (n - 1));
+    }));
   }
-  ps.sort((a, b) => a - b); vs.sort((a, b) => a - b);
+  const z = O.map((row, i) => row.map((o, j) => (V[i][j] > 0 ? (o - E[i][j]) / Math.sqrt(V[i][j]) : null)));
+
+  const groupOf = new Map();
+  usable.forEach((g, k) => g.forEach(r => groupOf.set(r, k)));
+  const p = usable.length
+    ? permutationP(usableRecords, rows, cols, { strata: r => groupOf.get(r), reps, rng: makeRng(seed) }).p
+    : NaN;
+
   return {
-    genera: genera.length,
-    weighted,
-    weightedTest: chiSquareTest(weighted),
-    draws, reps, tested,
-    medianP: quantile(ps, 0.5),
-    medianV: quantile(vs, 0.5),
-    shareSignificant: tested ? sig / tested : NaN,
+    p, reps,
+    groups: groups.size,
+    usableGroups: usable.length,
+    usableLanguages: usableRecords.length,
+    usableShare: records.length ? usableRecords.length / records.length : 0,
+    observed: O, expected: E, z,
   };
 }
 
-// Model 3: areal control. Tests whether A and B are associated within
-// macroareas (conditional independence given area), with a stratified
-// permutation p-value. Also reports, per cell, in how many areas the
-// combination is more common than expected when genera are weighted
-// equally (Dryer-style areal consistency).
-export function modelArealControl(records, rows, cols, nAreas, { reps = 2000, seed = 3 } = {}) {
+// Counts per macroarea, for the descriptive tables.
+export function areaTables(records, rows, cols, nAreas) {
   const perArea = Array.from({ length: nAreas }, () => []);
   for (const r of records) perArea[r.area].push(r);
-  const tables = perArea.map(rs => crossTable(rs, rows, cols));
-  const strat = stratifiedChiSquare(tables);
-  const perm = strat.testable
-    ? permutationP(records, rows, cols, { strata: r => r.area, reps, rng: makeRng(seed) })
-    : null;
-
-  const consistency = rows.map(() => cols.map(() => ({ over: 0, possible: 0 })));
-  perArea.forEach(rs => {
-    if (!rs.length) return;
-    const genusCount = new Map();
-    for (const r of rs) genusCount.set(r.genus, (genusCount.get(r.genus) || 0) + 1);
-    const w = crossTable(rs, rows, cols, r => 1 / genusCount.get(r.genus));
-    const { rowSums, colSums, n } = margins(w);
-    w.forEach((row, i) => row.forEach((o, j) => {
-      if (rowSums[i] === 0 || colSums[j] === 0) return;
-      const e = rowSums[i] * colSums[j] / n;
-      consistency[i][j].possible++;
-      if (o > e + 1e-9) consistency[i][j].over++;
-    }));
-  });
-
-  const areaSummaries = perArea.map((rs, k) => ({
+  return perArea.map((rs, k) => ({
     area: k,
     n: rs.length,
     genera: new Set(rs.map(r => r.genus)).size,
-    table: tables[k],
-    test: strat.per[k],
+    table: crossTable(rs, rows, cols),
   }));
-  return { strat, permP: perm ? perm.p : NaN, reps, consistency, areaSummaries };
 }
