@@ -58,6 +58,13 @@ with sync_playwright() as p:
             problems.append(f"non-A features in syntactic list: {non_a[:5]}")
         morph_non_a = page.eval_on_selector_all("#morph-0 option", "os => os.map(o => o.value).filter(v => v && !v.endsWith('A'))")
         print("morph list keeps non-A features:", len(morph_non_a))
+        # Features below the language-count threshold are not offered.
+        counts = page.eval_on_selector_all(
+            "#morph-0 option, #syn-0 option",
+            "os => os.filter(o => o.value).map(o => +((o.textContent.match(/\\((\\d+) languages\\)/) || [])[1]))")
+        print("options offered (morph+syn):", len(counts), "smallest:", min(counts))
+        if min(counts) < 250:
+            problems.append(f"feature under 250 languages offered ({min(counts)})")
 
         print("pair status:", page.inner_text("#pair-status"))
         n_buttons = page.locator(".pair-list button:has-text('Show results')").count()
@@ -108,6 +115,12 @@ with sync_playwright() as p:
         page.wait_for_selector("#morph-0")
         if page.eval_on_selector_all("#features-section select", "ss => ss.filter(s => s.value).length"):
             problems.append("cleared choices came back after reload")
+        # A pair with few shared languages carries a warning.
+        page.goto(URL + "#m=54A,,&s=84A,,&show=54A~84A")
+        page.reload()
+        page.wait_for_selector("#sec-m3")
+        if "Only 55 languages" not in page.inner_text("#results"):
+            problems.append("small-pair warning missing for 54A x 84A")
         page.goto(URL + "#m=26A,51A,49A&s=81A,87A,143A&show=26A~81A")
         page.reload()
         page.wait_for_selector("#sec-m3")

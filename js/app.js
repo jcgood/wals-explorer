@@ -4,6 +4,8 @@ import { modelAllLanguages, modelGenusSampling, modelArealControl } from "./stat
 // ---------- settings ----------
 
 const SLOTS = 3;                 // features per list
+const MIN_LANGS = 250;           // features coded for fewer languages aren't offered
+const SMALL_PAIR = 100;          // pairs sharing fewer languages get a warning
 const PERM_REPS = 2000;
 const GENUS_DRAWS = 1000;
 const STORAGE_KEY = "wals-explorer-v1";
@@ -69,8 +71,9 @@ const CLASS_WORD = { morph: "morphological", syn: "syntactic" };
 
 const pairKey = (a, b) => `${a}~${b}`;
 
-// The syntactic list offers only the "A" feature of each WALS chapter.
-const inList = (f, cls) => cls === "morph" || f.id.endsWith("A");
+// Features need at least MIN_LANGS languages; the syntactic list offers
+// only the "A" feature of each WALS chapter.
+const inList = (f, cls) => f.lang.length >= MIN_LANGS && (cls === "morph" || f.id.endsWith("A"));
 
 // Pairs are fixed by the design: morphology × morphology (each morphological
 // feature with the others) and morphology × syntax (each with each).
@@ -353,6 +356,12 @@ function renderPairResults(out, ctx) {
   out.append(el("p", {},
     `${records.length} languages are coded for both features (WALS codes ${A.lang.length} languages for ${A.id} and ${B.lang.length} for ${B.id}). ` +
     `They belong to ${generaN} genera in ${familiesN} families. Rows are values of ${A.id}; columns are values of ${B.id}.`));
+
+  if (records.length < SMALL_PAIR) {
+    out.append(el("p", { class: "warning" },
+      `Only ${records.length} languages are coded for both features. With so few, the tables are sparse and the results are fragile, `,
+      "especially for Model 2 (one language per genus) and Model 3 (within areas). Treat any pattern here as tentative."));
+  }
 
   if (A.chapter === B.chapter) {
     out.append(el("p", { class: "warning" },
@@ -716,6 +725,7 @@ async function init() {
     $("syn-slots").append(buildFeatureSelect("syn", i));
   }
   $("clear-all").addEventListener("click", clearAll);
+  $("min-langs").textContent = String(MIN_LANGS);
   $("data-credit").replaceChildren(`Data: ${DATA.citation} Version: ${DATA.version}. Licence: ${DATA.license}. `,
     "Map tiles © OpenStreetMap contributors.");
 

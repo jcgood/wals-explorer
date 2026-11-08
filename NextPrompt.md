@@ -23,6 +23,8 @@ its "NEXT TIME?" notes are what motivated this tool.
 - The assignment design is built in (2026-11-08, Jeff): 3 morphological +
   3 syntactic features; pairs are generated automatically (3 morph×morph,
   9 morph×syn); syntactic list is "A" features only (`inList` in
-  `js/app.js`). `SLOTS` sets the number per list.
+  `js/app.js`). `SLOTS` sets the number per list. Features need >= 250
+  languages (`MIN_LANGS`; chosen from the overlap analysis in the commit
+  message) and pairs under 100 shared languages get a warning (`SMALL_PAIR`).
 - After any change to `js/stats.js`, run `tests/check_stats.py`; after UI
   changes, run `tests/e2e.py` against a local server.
