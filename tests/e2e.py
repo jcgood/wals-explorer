@@ -99,6 +99,19 @@ with sync_playwright() as p:
             problems.append("results not cleared when their pair became incomplete")
         page.select_option("#syn-0", "81A")
 
+        # "Clear all choices" empties everything, including the saved link.
+        page.click("#clear-all")
+        chosen = page.eval_on_selector_all("#features-section select", "ss => ss.filter(s => s.value).length")
+        if chosen or page.locator(".pair-list button").count():
+            problems.append("clear all left choices or pairs behind")
+        page.reload()
+        page.wait_for_selector("#morph-0")
+        if page.eval_on_selector_all("#features-section select", "ss => ss.filter(s => s.value).length"):
+            problems.append("cleared choices came back after reload")
+        page.goto(URL + "#m=26A,51A,49A&s=81A,87A,143A&show=26A~81A")
+        page.reload()
+        page.wait_for_selector("#sec-m3")
+
         # Narrow (phone) layout: no horizontal page scroll.
         page.set_viewport_size({"width": 375, "height": 800})
         page.wait_for_timeout(300)

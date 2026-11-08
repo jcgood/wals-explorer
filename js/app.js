@@ -188,6 +188,19 @@ function onFeatureChange(cls, index, value) {
   saveState();
 }
 
+function clearAll() {
+  state = { morph: Array(SLOTS).fill(""), syn: Array(SLOTS).fill(""), show: null };
+  for (const cls of ["morph", "syn"]) {
+    for (let i = 0; i < SLOTS; i++) $(`${cls}-${i}`).value = "";
+  }
+  updateFeatureHints();
+  renderPairs();
+  renderResults();
+  saveState();
+  $("feature-status").textContent = "All choices cleared. " + $("feature-status").textContent;
+  $("morph-0").focus();
+}
+
 // ---------- step 2: pairs ----------
 
 function renderPairList(list, pairs, aWord, bWord) {
@@ -702,6 +715,7 @@ async function init() {
     $("morph-slots").append(buildFeatureSelect("morph", i));
     $("syn-slots").append(buildFeatureSelect("syn", i));
   }
+  $("clear-all").addEventListener("click", clearAll);
   $("data-credit").replaceChildren(`Data: ${DATA.citation} Version: ${DATA.version}. Licence: ${DATA.license}. `,
     "Map tiles © OpenStreetMap contributors.");
 
