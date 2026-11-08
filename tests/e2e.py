@@ -15,7 +15,8 @@ URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8765/"
 SHOTS = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 AXE = "https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.8.4/axe.min.js"
 
-MORPH = ["26A", "51A", "49A"]
+MORPH = ["69A", "51A", "49A"]
+EXCLUDED = ["26A", "95A", "96A", "97A", "31A", "32A", "77A", "113A"]
 SYN = ["81A", "87A", "143A"]
 N_PAIRS = 3 + 9
 
@@ -49,7 +50,13 @@ with sync_playwright() as p:
         for i, f in enumerate(SYN):
             page.select_option(f"#syn-{i}", f)
         # A feature chosen in one slot is disabled in the others.
-        disabled = page.eval_on_selector("#morph-1 option[value='26A']", "o => o.disabled")
+        disabled = page.eval_on_selector("#morph-1 option[value='69A']", "o => o.disabled")
+        offered = page.eval_on_selector_all("#morph-0 option, #syn-0 option", "os => os.map(o => o.value)")
+        leaked = [x for x in EXCLUDED if x in offered]
+        if leaked:
+            problems.append(f"excluded features offered: {leaked}")
+        if page.locator("#excluded-list li").count() != len(EXCLUDED):
+            problems.append("excluded-features list incomplete")
         if not disabled:
             problems.append("duplicate feature not disabled")
         # Syntactic list offers only "A" features.
@@ -95,7 +102,7 @@ with sync_playwright() as p:
         page.wait_for_selector("#sec-m3")
         if page.locator(".pair-list button:has-text('Show results')").count() != N_PAIRS:
             problems.append("pairs not restored from link")
-        if "26A" not in page.inner_text("#res-title") or "81A" not in page.inner_text("#res-title"):
+        if "69A" not in page.inner_text("#res-title") or "81A" not in page.inner_text("#res-title"):
             problems.append("shown pair not restored from link")
 
         # Removing a feature leaves its pairs pending and clears results.
@@ -121,7 +128,7 @@ with sync_playwright() as p:
         page.wait_for_selector("#sec-m3")
         if "Only 55 languages" not in page.inner_text("#results"):
             problems.append("small-pair warning missing for 54A x 84A")
-        page.goto(URL + "#m=26A,51A,49A&s=81A,87A,143A&show=26A~81A")
+        page.goto(URL + "#m=69A,51A,49A&s=81A,87A,143A&show=69A~81A")
         page.reload()
         page.wait_for_selector("#sec-m3")
 

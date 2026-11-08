@@ -71,9 +71,24 @@ const CLASS_WORD = { morph: "morphological", syn: "syntactic" };
 
 const pairKey = (a, b) => `${a}~${b}`;
 
-// Features need at least MIN_LANGS languages; the syntactic list offers
-// only the "A" feature of each WALS chapter.
-const inList = (f, cls) => f.lang.length >= MIN_LANGS && (cls === "morph" || f.id.endsWith("A"));
+// Features left out on purpose (Jeff, 2026-11-08): derivative features, and
+// in clusters of overlapping features all but the one that carries the
+// most distinctions. Reasons are shown on the page.
+const EXCLUDED = {
+  "26A": "computed from the affix-position features of other chapters (e.g. 33A, 51A, 57A, 69A, 112A)",
+  "95A": "combines 83A Order of Object and Verb with 85A Order of Adposition and Noun Phrase",
+  "96A": "combines 83A Order of Object and Verb with 90A Order of Relative Clause and Noun",
+  "97A": "combines 83A Order of Object and Verb with 87A Order of Adjective and Noun",
+  "31A": "largely predictable from 30A Number of Genders, which draws more distinctions",
+  "32A": "largely predictable from 30A Number of Genders, which draws more distinctions",
+  "77A": "largely predictable from 78A Coding of Evidentiality, which draws more distinctions",
+  "113A": "largely predictable from 114A Subtypes of Asymmetric Standard Negation, which draws more distinctions",
+};
+
+// Features need at least MIN_LANGS languages and must not be excluded; the
+// syntactic list offers only the "A" feature of each WALS chapter.
+const inList = (f, cls) =>
+  f.lang.length >= MIN_LANGS && !EXCLUDED[f.id] && (cls === "morph" || f.id.endsWith("A"));
 
 // Pairs are fixed by the design: morphology × morphology (each morphological
 // feature with the others) and morphology × syntax (each with each).
@@ -726,6 +741,9 @@ async function init() {
   }
   $("clear-all").addEventListener("click", clearAll);
   $("min-langs").textContent = String(MIN_LANGS);
+  $("excluded-list").replaceChildren(...Object.entries(EXCLUDED)
+    .filter(([id]) => FEAT.has(id))
+    .map(([id, why]) => el("li", {}, el("strong", {}, featureLabel(FEAT.get(id))), `: ${why}.`)));
   $("data-credit").replaceChildren(`Data: ${DATA.citation} Version: ${DATA.version}. Licence: ${DATA.license}. `,
     "Map tiles © OpenStreetMap contributors.");
 
